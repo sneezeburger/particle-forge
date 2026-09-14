@@ -1,0 +1,11 @@
+# scratch/verification artifacts (headless test harnesses, screenshots, Chrome profiles)
+_*
+
+# manual backup copies
+*- Copy.html
+*.bak
+
+# OS cruft
+Thumbs.db
+desktop.ini
+.DS_Store

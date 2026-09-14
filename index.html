@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>PARTICLE FORGE — interactive physics playground</title>
+<style>
+  :root{
+    --bg:#05060f;
+    --glass: rgba(18,20,42,.55);
+    --stroke: rgba(150,180,255,.18);
+    --txt:#dfe6ff;
+    --dim:#8b95c9;
+    --accent:#6ef3ff;
+    --accent2:#ff5edb;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--txt);
+    -webkit-tap-highlight-color:transparent;}
+  canvas{display:block;position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+
+  /* aurora overlay — sits above canvas, blends without eating the trails */
+  #aurora{
+    position:fixed;inset:0;pointer-events:none;mix-blend-mode:screen;opacity:.5;
+    background:
+      radial-gradient(60vmax 45vmax at 12% 8%, rgba(80,0,180,.30), transparent 62%),
+      radial-gradient(55vmax 40vmax at 88% 92%, rgba(0,140,190,.26), transparent 62%),
+      radial-gradient(40vmax 40vmax at 78% 12%, rgba(255,0,120,.16), transparent 60%);
+    animation:drift 26s ease-in-out infinite alternate;
+  }
+  @keyframes drift{ from{transform:translate3d(-2%,-1%,0) scale(1.02)} to{transform:translate3d(3%,2%,0) scale(1.10)} }
+  #vignette{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 50%, transparent 45%, rgba(0,0,0,.72) 100%);}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;top:16px;left:16px;z-index:5;pointer-events:none;user-select:none}
+  h1{margin:0;font-size:20px;letter-spacing:.34em;font-weight:700;
+     background:linear-gradient(90deg,#6ef3ff,#a77bff 40%,#ff5edb 70%,#ffd166);
+     -webkit-background-clip:text;background-clip:text;color:transparent;
+     background-size:300% 100%;animation:hue 8s linear infinite;
+     text-shadow:0 0 32px rgba(120,180,255,.25)}
+  @keyframes hue{to{background-position:300% 0}}
+  #sub{margin-top:5px;font-size:10.5px;letter-spacing:.16em;color:var(--dim)}
+  #stats{margin-top:10px;font-size:11px;color:var(--dim);line-height:1.65}
+  #stats b{color:var(--accent);font-weight:600}
+  #fpsbar{width:132px;height:4px;border-radius:4px;background:rgba(255,255,255,.09);overflow:hidden;margin-top:5px}
+  #fpsfill{height:100%;width:100%;background:linear-gradient(90deg,#6ef3ff,#7CFFA0);transition:width .12s linear}
+
+  /* ---------- Panel ---------- */
+  #panel{position:fixed;top:16px;right:16px;z-index:6;width:288px;max-height:calc(100vh - 32px);
+    overflow-y:auto;overflow-x:hidden;padding:14px;border-radius:16px;
+    background:var(--glass);border:1px solid var(--stroke);
+    backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
+    box-shadow:0 18px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);
+    transition:transform .32s cubic-bezier(.2,.8,.2,1), opacity .25s}
+  #panel.hidden{transform:translateX(115%);opacity:0}
+  #panel::-webkit-scrollbar{width:7px}
+  #panel::-webkit-scrollbar-thumb{background:rgba(140,170,255,.3);border-radius:8px}
+  .sec{font-size:9.5px;letter-spacing:.22em;color:var(--dim);margin:14px 0 8px;
+    border-top:1px solid rgba(255,255,255,.07);padding-top:11px}
+  .sec:first-child{margin-top:0;border-top:0;padding-top:0}
+  .row{display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:3px;color:#c3cdf5}
+  .row span:last-child{color:var(--accent);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:20px;background:transparent;margin:0 0 9px;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;
+    background:linear-gradient(90deg,#6ef3ff,#ff5edb)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+    background:#fff;margin-top:-5px;box-shadow:0 0 10px rgba(110,243,255,.9),0 0 0 1px rgba(0,0,0,.4)}
+  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:linear-gradient(90deg,#6ef3ff,#ff5edb)}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:#fff;
+    box-shadow:0 0 10px rgba(110,243,255,.9)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .wide{grid-column:1 / -1}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  button{font:inherit;font-size:10px;letter-spacing:.09em;padding:7px 4px;border-radius:9px;cursor:pointer;
+    color:#cfd8ff;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.11);
+    transition:.16s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  button:hover{background:rgba(110,243,255,.16);border-color:rgba(110,243,255,.5);color:#fff;transform:translateY(-1px)}
+  button:active{transform:translateY(0) scale(.97)}
+  button.on{background:linear-gradient(135deg,rgba(110,243,255,.28),rgba(255,94,219,.28));
+    border-color:rgba(160,220,255,.65);color:#fff;box-shadow:0 0 16px rgba(110,243,255,.25)}
+  #toggle{position:fixed;top:16px;right:16px;z-index:7;width:38px;height:38px;padding:0;border-radius:11px;
+    font-size:15px;display:none;place-items:center;background:var(--glass);backdrop-filter:blur(12px)}
+  #toggle.show{display:grid}
+  #hint{position:fixed;bottom:14px;left:16px;z-index:5;font-size:10.5px;color:var(--dim);
+    letter-spacing:.06em;line-height:1.75;pointer-events:none;user-select:none}
+  kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-bottom-width:2px;
+    border-radius:5px;padding:1px 5px;font-size:9.5px;color:#dbe4ff}
+  @media(max-width:720px){ #panel{width:calc(100vw - 32px)} #hint{display:none} h1{font-size:15px} }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="aurora"></div>
+<div id="vignette"></div>
+
+<div id="hud">
+  <h1>PARTICLE&nbsp;FORGE</h1>
+  <div id="sub">SPH FLUID · N-BODY WELLS · VORTEX FIELD</div>
+  <div id="stats">
+    <div><b id="s_fps">60</b> fps &nbsp;·&nbsp; <b id="s_n">0</b> particles &nbsp;·&nbsp; <b id="s_pairs">0</b>k pairs &nbsp;·&nbsp; <b id="s_res">1.00</b>x res</div>
+    <div id="s_mode">preset: nebula</div>
+    <div id="fpsbar"><div id="fpsfill"></div></div>
+  </div>
+</div>
+
+<button id="toggle" title="Show controls (H)">☰</button>
+
+<div id="panel">
+  <div class="sec">PRESETS</div>
+  <div class="grid3">
+    <button data-preset="nebula" class="on">NEBULA</button>
+    <button data-preset="fluid">FLUID</button>
+    <button data-preset="galaxy">GALAXY</button>
+    <button data-preset="storm">STORM</button>
+    <button data-preset="web">WEB</button>
+    <button data-preset="zerog">ZERO-G</button>
+    <button data-preset="foam">FOAM</button>
+  </div>
+
+  <div class="sec">SIMULATION</div>
+  <div class="row"><span>particles</span><span id="v_count">2600</span></div>
+  <input type="range" id="r_count" min="300" max="9000" step="100" value="2600">
+  <div class="row"><span>gravity</span><span id="v_grav">0.00</span></div>
+  <input type="range" id="r_grav" min="-40" max="80" step="1" value="0">
+  <div class="row"><span>pressure</span><span id="v_press">340</span></div>
+  <input type="range" id="r_press" min="0" max="900" step="10" value="340">
+  <div class="row"><span>cohesion</span><span id="v_coh">120</span></div>
+  <input type="range" id="r_coh" min="0" max="500" step="5" value="120">
+  <div class="row"><span>viscosity</span><span id="v_visc">0.14</span></div>
+  <input type="range" id="r_visc" min="0" max="100" step="1" value="14">
+  <div class="row"><span>radius</span><span id="v_rad">17</span></div>
+  <input type="range" id="r_rad" min="6" max="40" step="1" value="17">
+  <div class="row"><span>drag</span><span id="v_drag">0.6%</span></div>
+  <input type="range" id="r_drag" min="0" max="80" step="1" value="6">
+  <div class="row"><span>vortex spin</span><span id="v_spin">0.30</span></div>
+  <input type="range" id="r_spin" min="-100" max="100" step="1" value="30">
+
+  <div class="sec">FORCE FIELD</div>
+  <div class="row"><span>wells</span><span id="v_wells">3</span></div>
+  <input type="range" id="r_wells" min="0" max="8" step="1" value="3">
+  <div class="row"><span>well mass</span><span id="v_mass">1.00</span></div>
+  <input type="range" id="r_mass" min="0" max="300" step="5" value="100">
+  <div class="row"><span>pointer force</span><span id="v_ptr">1.00</span></div>
+  <input type="range" id="r_ptr" min="0" max="300" step="5" value="100">
+
+  <div class="sec">RENDER</div>
+  <div class="row"><span>trail persistence</span><span id="v_trail">0.86</span></div>
+  <input type="range" id="r_trail" min="0" max="99" step="1" value="86">
+  <div class="row"><span>particle size</span><span id="v_size">1.00</span></div>
+  <input type="range" id="r_size" min="20" max="400" step="5" value="100">
+  <div class="row"><span>glow</span><span id="v_glow">0.85</span></div>
+  <input type="range" id="r_glow" min="0" max="100" step="1" value="85">
+  <div class="grid">
+    <button id="b_color">COLOR: VELOCITY</button>
+    <button id="b_bounds">EDGE: BOUNCE</button>
+    <button id="b_links">LINKS: OFF</button>
+    <button id="b_wellviz" class="on">WELLS: SHOWN</button>
+    <button id="b_quality" class="wide">QUALITY: AUTO</button>
+  </div>
+
+  <div class="sec">ACTIONS</div>
+  <div class="grid3">
+    <button id="b_burst">BURST</button>
+    <button id="b_reset">RESET</button>
+    <button id="b_pause">PAUSE</button>
+  </div>
+</div>
+
+<div id="hint">
+  <kbd>drag</kbd> attract &nbsp; <kbd>shift+drag</kbd> / <kbd>right-drag</kbd> repel &nbsp; <kbd>space</kbd> shockwave<br>
+  <kbd>1</kbd>–<kbd>7</kbd> presets &nbsp; <kbd>C</kbd> color &nbsp; <kbd>L</kbd> links &nbsp; <kbd>P</kbd> pause &nbsp; <kbd>R</kbd> reset &nbsp; <kbd>H</kbd> hide UI
+</div>
+
+<script>
+"use strict";
+(() => {
+/* ══════════════════════════════════════════════════════════
+   PARTICLE FORGE
+   • SPH-ish pressure / cohesion / viscosity via spatial hash
+   • orbiting n-body gravity wells + curl-ish vortex field
+   • additive glow rendering with a pre-baked hue sprite atlas
+   ══════════════════════════════════════════════════════════ */
+
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d', { alpha:false, desynchronized:true });
+
+let W = 0, H = 0, DPR = 1;
+
+/* ─────────── state ─────────── */
+const MAXN = 9000;
+const px = new Float32Array(MAXN), py = new Float32Array(MAXN);
+const vx = new Float32Array(MAXN), vy = new Float32Array(MAXN);
+const hue = new Float32Array(MAXN), rad = new Float32Array(MAXN);
+const dens = new Float32Array(MAXN), dprev = new Float32Array(MAXN);
+const heat = new Float32Array(MAXN);
+let N = 2600;
+/* hard ceiling on neighbour interactions per particle: keeps a collapsing
+   clump from turning the O(pairs) inner loop quadratic and killing the fps */
+const NEIGH_CAP = 32;
+/* forward half-neighbourhood offsets (own cell handled separately) */
+const OFF_X = [1, -1, 0, 1], OFF_Y = [0, 1, 1, 1];
+
+const P = {
+  gravity: 0, pressure: 340, cohesion: 120, viscosity: 0.14,
+  radius: 17, drag: 0.006, spin: 0.30,
+  wells: 3, wellMass: 1, pointer: 1,
+  trail: 0.86, size: 1, glow: 0.85,
+  bounds: 0,            // 0 bounce · 1 wrap · 2 void
+  colorMode: 0,         // 0 velocity · 1 density · 2 spectrum · 3 heat
+  links: false, wellViz: true, paused: false
+};
+const COLOR_NAMES  = ['VELOCITY','DENSITY','SPECTRUM','HEAT'];
+const BOUND_NAMES  = ['BOUNCE','WRAP','VOID'];
+
+/* pointer */
+const ptr = { x:0, y:0, px:0, py:0, down:false, mode:0, active:false }; // mode 0 pull · 1 push
+
+/* gravity wells */
+let wells = [];
+function buildWells(){
+  wells = [];
+  for (let i = 0; i < 8; i++){
+    wells.push({
+      a: Math.random()*Math.PI*2,
+      spd: (0.10 + Math.random()*0.28) * (Math.random()<.5?-1:1),
+      rx: 0.16 + Math.random()*0.26,
+      ry: 0.13 + Math.random()*0.24,
+      ph: Math.random()*Math.PI*2,
+      m: 0.55 + Math.random()*0.9,
+      h: Math.random()*360,
+      x: 0, y: 0
+    });
+  }
+}
+buildWells();
+
+/* shockwaves */
+const waves = [];
+
+/* ─────────── sprite atlas ─────────── */
+const HUES = 64, SPRITE = 64;
+const atlas = [];
+function buildAtlas(){
+  atlas.length = 0;
+  for (let i = 0; i < HUES; i++){
+    const s = document.createElement('canvas');
+    s.width = s.height = SPRITE;
+    const g = s.getContext('2d');
+    const h = (i / HUES) * 360, c = SPRITE / 2;
+    const grd = g.createRadialGradient(c, c, 0, c, c, c);
+    grd.addColorStop(0.00, `hsla(${h},100%,80%,0.95)`);
+    grd.addColorStop(0.16, `hsla(${h},100%,64%,0.70)`);
+    grd.addColorStop(0.40, `hsla(${h},100%,52%,0.28)`);
+    grd.addColorStop(0.70, `hsla(${h},100%,46%,0.07)`);
+    grd.addColorStop(1.00, `hsla(${h},100%,40%,0)`);
+    g.fillStyle = grd;
+    g.fillRect(0, 0, SPRITE, SPRITE);
+    atlas.push(s);
+  }
+}
+buildAtlas();
+
+/* ─────────── spatial hash ─────────── */
+let cell = 17, gw = 1, gh = 1;
+let head = new Int32Array(1);
+const nxt = new Int32Array(MAXN);
+
+function buildGrid(){
+  cell = Math.max(6, P.radius);
+  gw = Math.max(1, Math.ceil(W / cell) + 1);
+  gh = Math.max(1, Math.ceil(H / cell) + 1);
+  const n = gw * gh;
+  if (head.length < n) head = new Int32Array(n);
+  head.fill(-1, 0, n);
+  for (let i = 0; i < N; i++){
+    let cx = (px[i] / cell) | 0, cy = (py[i] / cell) | 0;
+    if (cx < 0) cx = 0; else if (cx >= gw) cx = gw - 1;
+    if (cy < 0) cy = 0; else if (cy >= gh) cy = gh - 1;
+    const c = cy * gw + cx;
+    nxt[i] = head[c];
+    head[c] = i;
+  }
+}
+
+/* ─────────── spawn ─────────── */
+function spawn(i, kind){
+  const cx = W / 2, cy = H / 2;
+  if (kind === 'disc'){
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * Math.min(W, H) * 0.34;
+    px[i] = cx + Math.cos(a) * r;
+    py[i] = cy + Math.sin(a) * r;
+    const orb = r * 0.011;
+    vx[i] = -Math.sin(a) * orb * 26;
+    vy[i] =  Math.cos(a) * orb * 26;
+  } else if (kind === 'block'){
+    px[i] = W * 0.5 + (Math.random() - 0.5) * W * 0.5;
+    py[i] = H * 0.22 + Math.random() * H * 0.4;
+    vx[i] = (Math.random() - 0.5) * 12;
+    vy[i] = (Math.random() - 0.5) * 12;
+  } else {
+    px[i] = Math.random() * W;
+    py[i] = Math.random() * H;
+    vx[i] = (Math.random() - 0.5) * 60;
+    vy[i] = (Math.random() - 0.5) * 60;
+  }
+  hue[i] = (i / Math.max(1, N)) * 360 + Math.random() * 40;
+  rad[i] = 0.65 + Math.random() * 0.8;
+  heat[i] = 0;
+  dens[i] = 0;
+}
+function reseed(kind){ for (let i = 0; i < N; i++) spawn(i, kind); }
+
+/* ─────────── resize + adaptive resolution ─────────── */
+let qualMode = 0;          // 0 AUTO · 1 HIGH · 2 BALANCED · 3 SPEED
+let autoScale = 1;
+const QUAL_NAMES = ['AUTO', 'HIGH', 'BALANCED', 'SPEED'];
+
+function pixelRatio(){
+  const dev = Math.min(window.devicePixelRatio || 1, 2);
+  if (qualMode === 1) return dev;
+  if (qualMode === 2) return Math.min(dev, 1.25);
+  if (qualMode === 3) return 1;
+  return Math.max(0.6, Math.min(dev, 1.75) * autoScale);
+}
+
+function resize(){
+  DPR = pixelRatio();
+  W = window.innerWidth; H = window.innerHeight;
+  cvs.width  = Math.max(1, Math.floor(W * DPR));
+  cvs.height = Math.max(1, Math.floor(H * DPR));
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#05060f';
+  ctx.fillRect(0, 0, W, H);
+}
+window.addEventListener('resize', () => { const o = W || 1, p = H || 1; resize();
+  for (let i = 0; i < N; i++){ px[i] *= W / o; py[i] *= H / p; } });
+resize();
+reseed('rand');
+
+/* ─────────── physics ─────────── */
+let pairCount = 0;
+
+function physics(dt){
+  const r = P.radius, r2 = r * r;
+  const kP = P.pressure, kC = P.cohesion, kV = P.viscosity;
+  pairCount = 0;
+
+  buildGrid();
+  dprev.set(dens.subarray(0, N));   // last frame's density drives the pressure law
+  dens.fill(0, 0, N);
+
+  /* ── neighbour pass: pressure + cohesion + viscosity ──
+     Half-neighbourhood scan: own cell (forward pairs only) plus the four
+     "forward" cells. Together with their mirrors on other particles this
+     covers every unordered pair exactly once, so we walk half as many
+     linked-list nodes as a full 3x3 sweep that discards j <= i.          */
+  for (let i = 0; i < N; i++){
+    let cx = (px[i] / cell) | 0, cy = (py[i] / cell) | 0;
+    if (cx < 0) cx = 0; else if (cx >= gw) cx = gw - 1;
+    if (cy < 0) cy = 0; else if (cy >= gh) cy = gh - 1;
+    const x0 = px[i], y0 = py[i];
+    let cnt = 0;
+
+    scan:
+    for (let s = 0; s < 5; s++){
+      let gx, gy, fwdOnly;
+      if (s === 0){ gx = cx; gy = cy; fwdOnly = true; }
+      else {
+        gx = cx + OFF_X[s - 1]; gy = cy + OFF_Y[s - 1]; fwdOnly = false;
+        if (gx < 0 || gx >= gw || gy < 0 || gy >= gh) continue;
+      }
+      for (let j = head[gy * gw + gx]; j !== -1; j = nxt[j]){
+        if (fwdOnly && j <= i) continue;
+        const dx = px[j] - x0, dy = py[j] - y0;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= r2 || d2 < 1e-6) continue;
+
+        pairCount++;
+        const d = Math.sqrt(d2);
+        const q = 1 - d / r;              // 0 at edge → 1 at centre
+        const nx = dx / d, ny = dy / d;
+
+        dens[i] += q; dens[j] += q;
+
+        // equation of state: the denser it already is, the harder it pushes back.
+        // this is what stops wells from crushing matter into a singular blob.
+        const stiff = 1 + (dprev[i] + dprev[j]) * 0.19;
+        const f = (kP * q * q * stiff - kC * q * (1 - q) * 4) * dt;
+        vx[i] -= nx * f; vy[i] -= ny * f;
+        vx[j] += nx * f; vy[j] += ny * f;
+
+        // viscosity: damp approach velocity along the normal
+        if (kV > 0){
+          const vr = (vx[j] - vx[i]) * nx + (vy[j] - vy[i]) * ny;
+          if (vr < 0){
+            const imp = kV * q * vr * 0.5;
+            vx[i] += nx * imp; vy[i] += ny * imp;
+            vx[j] -= nx * imp; vy[j] -= ny * imp;
+          }
+        }
+        if (++cnt >= NEIGH_CAP) break scan;
+      }
+    }
+  }
+
+  /* ── fields + integration ── */
+  const nw = P.wells | 0, wm = P.wellMass;
+  const grav = P.gravity, spin = P.spin;
+  const dragK = Math.pow(1 - P.drag, dt * 60);
+  const pf = P.pointer;
+  const bounds = P.bounds;
+
+  for (let i = 0; i < N; i++){
+    let ax = 0, ay = grav * 10;
+    const x = px[i], y = py[i];
+
+    // gravity wells (softened newtonian) + tangential vortex
+    if (wm > 0){
+      for (let w = 0; w < nw; w++){
+        const wl = wells[w];
+        const dx = wl.x - x, dy = wl.y - y;
+        const d2 = dx * dx + dy * dy + 900;
+        const inv = 1 / Math.sqrt(d2);
+        const g = 26000 * wm * wl.m / d2;
+        ax += dx * inv * g; ay += dy * inv * g;
+        if (spin !== 0){
+          const s = g * spin * 1.5;
+          ax += -dy * inv * s; ay += dx * inv * s;
+        }
+      }
+    }
+
+    // pointer force
+    if (ptr.down){
+      const dx = ptr.x - x, dy = ptr.y - y;
+      const d2 = dx * dx + dy * dy + 400;
+      const inv = 1 / Math.sqrt(d2);
+      const sgn = ptr.mode === 0 ? 1 : -1;
+      const g = sgn * 110000 * pf / d2;
+      ax += dx * inv * g; ay += dy * inv * g;
+      if (ptr.mode === 0){
+        // swirl around the cursor so pulled matter orbits instead of collapsing
+        const s = Math.abs(g) * 0.55;
+        ax += -dy * inv * s; ay += dx * inv * s;
+      }
+      if (d2 < 26000) heat[i] = Math.min(1, heat[i] + dt * 2.4);
+    }
+
+    // shockwaves
+    for (let k = 0; k < waves.length; k++){
+      const wv = waves[k];
+      const dx = x - wv.x, dy = y - wv.y;
+      const d = Math.sqrt(dx * dx + dy * dy) + 1e-3;
+      const band = Math.abs(d - wv.r);
+      if (band < wv.w){
+        const amp = (1 - band / wv.w) * wv.p * (1 - wv.r / wv.max);
+        ax += (dx / d) * amp; ay += (dy / d) * amp;
+        heat[i] = Math.min(1, heat[i] + amp * dt * 0.02);
+      }
+    }
+
+    let nvx = (vx[i] + ax * dt) * dragK;
+    let nvy = (vy[i] + ay * dt) * dragK;
+
+    // clamp so nothing tunnels through the world
+    const sp2 = nvx * nvx + nvy * nvy, MAXV = 2600;
+    if (sp2 > MAXV * MAXV){ const s = MAXV / Math.sqrt(sp2); nvx *= s; nvy *= s; }
+
+    let nx2 = x + nvx * dt, ny2 = y + nvy * dt;
+
+    if (bounds === 0){                       // bounce
+      const e = 0.72, m = 2;
+      if (nx2 < m){ nx2 = m; nvx = Math.abs(nvx) * e; }
+      else if (nx2 > W - m){ nx2 = W - m; nvx = -Math.abs(nvx) * e; }
+      if (ny2 < m){ ny2 = m; nvy = Math.abs(nvy) * e; }
+      else if (ny2 > H - m){ ny2 = H - m; nvy = -Math.abs(nvy) * e; }
+    } else if (bounds === 1){                // wrap
+      if (nx2 < 0) nx2 += W; else if (nx2 >= W) nx2 -= W;
+      if (ny2 < 0) ny2 += H; else if (ny2 >= H) ny2 -= H;
+    } else {                                 // void → respawn at an edge
+      if (nx2 < -60 || nx2 > W + 60 || ny2 < -60 || ny2 > H + 60){
+        const a = Math.random() * Math.PI * 2;
+        nx2 = W / 2 + Math.cos(a) * Math.min(W, H) * 0.42;
+        ny2 = H / 2 + Math.sin(a) * Math.min(W, H) * 0.42;
+        nvx = -Math.cos(a) * 40; nvy = -Math.sin(a) * 40;
+      }
+    }
+
+    px[i] = nx2; py[i] = ny2; vx[i] = nvx; vy[i] = nvy;
+    heat[i] *= 0.972;
+  }
+
+  /* advance wells + waves */
+  const t = performance.now() / 1000;
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H);
+  for (let w = 0; w < wells.length; w++){
+    const wl = wells[w];
+    wl.a += wl.spd * dt;
+    wl.x = cx + Math.cos(wl.a + wl.ph) * R * wl.rx + Math.sin(t * 0.31 + w) * 22;
+    wl.y = cy + Math.sin(wl.a * 1.31 + wl.ph) * R * wl.ry + Math.cos(t * 0.27 + w) * 22;
+  }
+  for (let k = waves.length - 1; k >= 0; k--){
+    const wv = waves[k];
+    wv.r += wv.spd * dt;
+    if (wv.r > wv.max) waves.splice(k, 1);
+  }
+}
+
+/* ─────────── render ─────────── */
+function render(){
+  // trail fade
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = `rgba(5,6,15,${Math.max(0.012, 1 - P.trail)})`;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.globalCompositeOperation = 'lighter';
+
+  // links (constellation mesh) — reuses the hash grid from the physics step
+  if (P.links){
+    const lr = P.radius * 1.45, lr2 = lr * lr;
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    let drawn = 0;
+    for (let i = 0; i < N && drawn < 22000; i += 1){
+      let cx = (px[i] / cell) | 0, cy = (py[i] / cell) | 0;
+      if (cx < 0) cx = 0; else if (cx >= gw) cx = gw - 1;
+      if (cy < 0) cy = 0; else if (cy >= gh) cy = gh - 1;
+      const xhi = cx < gw - 1 ? cx + 1 : cx, yhi = cy < gh - 1 ? cy + 1 : cy;
+      for (let gy = cy; gy <= yhi; gy++){
+        const row = gy * gw;
+        for (let gx = (gy === cy ? cx : (cx > 0 ? cx - 1 : 0)); gx <= xhi; gx++){
+          for (let j = head[row + gx]; j !== -1; j = nxt[j]){
+            if (j <= i) continue;
+            const dx = px[j] - px[i], dy = py[j] - py[i];
+            const d2 = dx * dx + dy * dy;
+            if (d2 < lr2){
+              ctx.moveTo(px[i], py[i]); ctx.lineTo(px[j], py[j]);
+              if (++drawn > 22000) break;
+            }
+          }
+        }
+      }
+    }
+    ctx.strokeStyle = 'rgba(120,205,255,0.12)';
+    ctx.stroke();
+  }
+
+  // wells
+  if (P.wellViz){
+    for (let w = 0; w < (P.wells | 0); w++){
+      const wl = wells[w];
+      const pulse = 1 + Math.sin(performance.now() / 320 + w) * 0.14;
+      const R = 78 * pulse * (0.55 + wl.m * 0.5);
+      const g = ctx.createRadialGradient(wl.x, wl.y, 0, wl.x, wl.y, R);
+      g.addColorStop(0, `hsla(${wl.h},100%,80%,0.30)`);
+      g.addColorStop(0.35, `hsla(${wl.h},100%,60%,0.11)`);
+      g.addColorStop(1, `hsla(${wl.h},100%,50%,0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(wl.x, wl.y, R, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = `hsla(${wl.h},100%,78%,0.35)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(wl.x, wl.y, 13 * pulse, 0, 6.2832); ctx.stroke();
+    }
+  }
+
+  // shockwave rings
+  for (let k = 0; k < waves.length; k++){
+    const wv = waves[k];
+    const a = (1 - wv.r / wv.max) * 0.55;
+    ctx.strokeStyle = `hsla(${wv.h},100%,72%,${a})`;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(wv.x, wv.y, wv.r, 0, 6.2832); ctx.stroke();
+  }
+
+  // particles
+  const mode = P.colorMode;
+  const base = 4.2 * P.size, glow = P.glow;
+  const tt = performance.now() / 1000;
+  let lastA = -1;
+
+  for (let i = 0; i < N; i++){
+    const s = Math.sqrt(vx[i] * vx[i] + vy[i] * vy[i]);
+    let h;
+    if (mode === 0)      h = 210 - Math.min(1, s / 620) * 230;        // cyan → red
+    else if (mode === 1) h = 265 - Math.min(1, dens[i] / 7) * 250;    // violet → gold
+    else if (mode === 2) h = (hue[i] + tt * 26) % 360;                // rolling spectrum
+    else                 h = 32 - Math.min(1, heat[i]) * 40 + Math.min(1, s / 900) * 26;
+    if (h < 0) h += 360;
+
+    const idx = ((h * (HUES / 360)) | 0) & (HUES - 1);
+    const energy = Math.min(1, s / 460);
+    const size = base * rad[i] * (1 + energy * 1.5 + Math.min(1, dens[i] / 9) * 0.5) * (1 + glow * 1.5);
+    // keep additive accumulation below the clipping point so dense clumps
+    // read as coloured light instead of flat white
+    let a = (0.10 + energy * 0.30 + glow * 0.17) * (mode === 3 ? 0.6 + heat[i] * 0.6 : 1);
+    if (a > 0.62) a = 0.62;
+
+    const qa = (a * 16 | 0) / 16;
+    if (qa !== lastA){ ctx.globalAlpha = qa; lastA = qa; }
+    const hs = size * 0.5;
+    ctx.drawImage(atlas[idx], px[i] - hs, py[i] - hs, size, size);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ─────────── loop ─────────── */
+let last = performance.now(), fps = 60, acc = 0, frames = 0, lastQual = 0;
+const el = id => document.getElementById(id);
+
+function frame(now){
+  requestAnimationFrame(frame);
+  let dt = (now - last) / 1000;
+  last = now;
+  // guard against clock skew / tab-switch spikes — a bad dt must never poison the sim
+  if (!(dt > 0)) dt = 0; else if (dt > 0.05) dt = 0.05;
+
+  if (!P.paused && dt > 0){
+    const steps = dt > 0.024 ? 2 : 1;
+    const sdt = dt / steps;
+    for (let s = 0; s < steps; s++) physics(sdt);
+  }
+  render();
+
+  frames++; acc += dt;
+  if (acc >= 0.4){
+    fps = frames / acc; frames = 0; acc = 0;
+    el('s_fps').textContent = fps.toFixed(0);
+    el('s_n').textContent = N;
+    el('s_pairs').textContent = (pairCount / 1000).toFixed(1);
+    el('s_res').textContent = DPR.toFixed(2);
+    el('fpsfill').style.width = Math.min(100, fps / 60 * 100) + '%';
+    el('fpsfill').style.background = fps > 50
+      ? 'linear-gradient(90deg,#6ef3ff,#7CFFA0)'
+      : fps > 30 ? 'linear-gradient(90deg,#ffd166,#ff9f45)'
+                 : 'linear-gradient(90deg,#ff5edb,#ff4d4d)';
+
+    // adaptive resolution: trade pixels for smoothness, and claw them back when idle
+    if (qualMode === 0 && now - lastQual > 1400){
+      if (fps < 46 && autoScale > 0.6){
+        autoScale = Math.max(0.6, autoScale - 0.15); resize(); lastQual = now;
+      } else if (fps > 57 && autoScale < 1){
+        autoScale = Math.min(1, autoScale + 0.1); resize(); lastQual = now;
+      }
+    }
+  }
+}
+requestAnimationFrame(frame);
+
+/* ─────────── interaction ─────────── */
+function pos(e){
+  const t = e.touches ? e.touches[0] : e;
+  ptr.px = ptr.x; ptr.py = ptr.y;
+  ptr.x = t.clientX; ptr.y = t.clientY;
+}
+cvs.addEventListener('pointerdown', e => {
+  cvs.setPointerCapture(e.pointerId);
+  pos(e); ptr.down = true;
+  ptr.mode = (e.button === 2 || e.shiftKey) ? 1 : 0;
+});
+cvs.addEventListener('pointermove', e => { pos(e); if (e.shiftKey && ptr.down) ptr.mode = 1; });
+window.addEventListener('pointerup', () => { ptr.down = false; });
+cvs.addEventListener('contextmenu', e => e.preventDefault());
+cvs.addEventListener('dblclick', e => { pos(e); burst(ptr.x, ptr.y); });
+
+function burst(x, y, power){
+  waves.push({
+    x, y, r: 4, spd: Math.min(W, H) * 0.95, w: 62,
+    max: Math.hypot(W, H) * 0.72, p: power || 5200,
+    h: Math.random() * 360
+  });
+}
+
+/* ─────────── UI wiring ─────────── */
+function slider(id, valId, fn, fmt){
+  const r = el(id), v = el(valId);
+  const upd = () => { const raw = +r.value; fn(raw); v.textContent = fmt(raw); };
+  r.addEventListener('input', upd); upd();
+  return r;
+}
+const S = {};
+S.count = slider('r_count','v_count', x => {
+  const n = x | 0;
+  if (n > N) for (let i = N; i < n; i++) spawn(i, 'rand');
+  N = n;
+}, x => x);
+S.grav  = slider('r_grav','v_grav',  x => P.gravity = x,        x => (x/10).toFixed(2));
+S.press = slider('r_press','v_press',x => P.pressure = x,       x => x);
+S.coh   = slider('r_coh','v_coh',    x => P.cohesion = x,       x => x);
+S.visc  = slider('r_visc','v_visc',  x => P.viscosity = x/100,  x => (x/100).toFixed(2));
+S.rad   = slider('r_rad','v_rad',    x => P.radius = x,         x => x);
+S.drag  = slider('r_drag','v_drag',  x => P.drag = x/1000,      x => (x/10).toFixed(1)+'%');
+S.spin  = slider('r_spin','v_spin',  x => P.spin = x/100,       x => (x/100).toFixed(2));
+S.wells = slider('r_wells','v_wells',x => P.wells = x,          x => x);
+S.mass  = slider('r_mass','v_mass',  x => P.wellMass = x/100,   x => (x/100).toFixed(2));
+S.ptr   = slider('r_ptr','v_ptr',    x => P.pointer = x/100,    x => (x/100).toFixed(2));
+S.trail = slider('r_trail','v_trail',x => P.trail = x/100,      x => (x/100).toFixed(2));
+S.size  = slider('r_size','v_size',  x => P.size = x/100,       x => (x/100).toFixed(2));
+S.glow  = slider('r_glow','v_glow',  x => P.glow = x/100,       x => (x/100).toFixed(2));
+
+function setSlider(key, val){ S[key].value = val; S[key].dispatchEvent(new Event('input')); }
+
+el('b_color').addEventListener('click', () => {
+  P.colorMode = (P.colorMode + 1) % 4;
+  el('b_color').textContent = 'COLOR: ' + COLOR_NAMES[P.colorMode];
+});
+el('b_bounds').addEventListener('click', () => {
+  P.bounds = (P.bounds + 1) % 3;
+  el('b_bounds').textContent = 'EDGE: ' + BOUND_NAMES[P.bounds];
+});
+el('b_links').addEventListener('click', () => {
+  P.links = !P.links;
+  el('b_links').textContent = 'LINKS: ' + (P.links ? 'ON' : 'OFF');
+  el('b_links').classList.toggle('on', P.links);
+});
+el('b_wellviz').addEventListener('click', () => {
+  P.wellViz = !P.wellViz;
+  el('b_wellviz').textContent = 'WELLS: ' + (P.wellViz ? 'SHOWN' : 'HIDDEN');
+  el('b_wellviz').classList.toggle('on', P.wellViz);
+});
+el('b_quality').addEventListener('click', () => {
+  qualMode = (qualMode + 1) % 4;
+  if (qualMode === 0) autoScale = 1;
+  el('b_quality').textContent = 'QUALITY: ' + QUAL_NAMES[qualMode];
+  el('b_quality').classList.toggle('on', qualMode !== 0);
+  resize();
+});
+el('b_burst').addEventListener('click', () => burst(W/2, H/2));
+el('b_reset').addEventListener('click', () => { buildWells(); reseed('rand'); });
+el('b_pause').addEventListener('click', () => {
+  P.paused = !P.paused;
+  el('b_pause').textContent = P.paused ? 'RESUME' : 'PAUSE';
+  el('b_pause').classList.toggle('on', P.paused);
+});
+
+/* ─────────── presets ─────────── */
+const PRESETS = {
+  nebula: { seed:'rand', color:2, bounds:1, links:false, s:{
+    count:3200, grav:0, press:330, coh:80, visc:14, rad:18, drag:5, spin:44,
+    wells:4, mass:115, ptr:110, trail:90, size:95, glow:88 } },
+  fluid:  { seed:'block', color:1, bounds:0, links:false, s:{
+    count:2200, grav:34, press:620, coh:210, visc:52, rad:15, drag:3, spin:0,
+    wells:0, mass:0, ptr:70, trail:55, size:80, glow:55 } },
+  galaxy: { seed:'disc', color:3, bounds:2, links:false, s:{
+    count:5000, grav:0, press:70, coh:20, visc:2, rad:11, drag:0, spin:8,
+    wells:2, mass:170, ptr:120, trail:94, size:70, glow:75 } },
+  storm:  { seed:'rand', color:0, bounds:0, links:false, s:{
+    count:3600, grav:0, press:480, coh:60, visc:8, rad:19, drag:2, spin:88,
+    wells:6, mass:150, ptr:160, trail:90, size:95, glow:95 } },
+  web:    { seed:'rand', color:1, bounds:0, links:true, s:{
+    count:1000, grav:0, press:260, coh:150, visc:22, rad:34, drag:12, spin:0,
+    wells:2, mass:60, ptr:80, trail:58, size:115, glow:72 } },
+  zerog:  { seed:'rand', color:2, bounds:1, links:false, s:{
+    count:4200, grav:0, press:560, coh:0, visc:0, rad:14, drag:0, spin:0,
+    wells:0, mass:0, ptr:120, trail:70, size:85, glow:70 } },
+  foam:   { seed:'rand', color:1, bounds:2, links:false, s:{
+    count:5100, grav:0, press:900, coh:0, visc:8, rad:40, drag:0, spin:88,
+    wells:0, mass:150, ptr:160, trail:90, size:95, glow:95 } }
+};
+
+function applyPreset(name){
+  const p = PRESETS[name]; if (!p) return;
+  for (const k in p.s) setSlider(k, p.s[k]);
+  P.colorMode = p.color; el('b_color').textContent = 'COLOR: ' + COLOR_NAMES[p.color];
+  P.bounds    = p.bounds; el('b_bounds').textContent = 'EDGE: ' + BOUND_NAMES[p.bounds];
+  P.links     = p.links;
+  el('b_links').textContent = 'LINKS: ' + (p.links ? 'ON' : 'OFF');
+  el('b_links').classList.toggle('on', p.links);
+  buildWells();
+  reseed(p.seed);
+  waves.length = 0;
+  document.querySelectorAll('[data-preset]').forEach(b =>
+    b.classList.toggle('on', b.dataset.preset === name));
+  el('s_mode').textContent = 'preset: ' + name;
+}
+document.querySelectorAll('[data-preset]').forEach(b =>
+  b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+
+/* ─────────── keyboard ─────────── */
+const panel = el('panel'), toggle = el('toggle');
+toggle.addEventListener('click', () => {
+  panel.classList.remove('hidden'); toggle.classList.remove('show');
+});
+const order = ['nebula','fluid','galaxy','storm','web','zerog','foam'];
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const k = e.key.toLowerCase();
+  if (k === ' '){ e.preventDefault(); burst(ptr.x, ptr.y); }
+  else if (k >= '1' && k <= '7') applyPreset(order[+k - 1]);
+  else if (k === 'c') el('b_color').click();
+  else if (k === 'l') el('b_links').click();
+  else if (k === 'b') el('b_bounds').click();
+  else if (k === 'p') el('b_pause').click();
+  else if (k === 'r') el('b_reset').click();
+  else if (k === 'h'){
+    const hid = panel.classList.toggle('hidden');
+    toggle.classList.toggle('show', hid);
+  }
+});
+
+/* boot */
+ptr.x = window.innerWidth / 2; ptr.y = window.innerHeight / 2;
+applyPreset('nebula');
+})();
+</script>
+</body>
+</html>
