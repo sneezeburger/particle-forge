@@ -52,6 +52,8 @@
     overflow-y:auto;overflow-x:hidden;padding:40px 14px 14px;border-radius:16px;
     background:var(--glass);border:1px solid var(--stroke);
     backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
+    backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
+    contain:layout paint style;
     box-shadow:0 18px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);
     transition:transform .32s cubic-bezier(.2,.8,.2,1), opacity .25s}
   #panel.hidden{transform:translateX(115%);opacity:0}
@@ -87,9 +89,24 @@
     display:grid;place-items:center;font-size:12px;line-height:1;border-radius:8px}
   #hint{position:fixed;bottom:14px;left:16px;z-index:5;font-size:10.5px;color:var(--dim);
     letter-spacing:.06em;line-height:1.75;pointer-events:none;user-select:none}
+  #share_feedback{min-height:1.2em;color:var(--accent);font-size:10px;text-align:center}
+  body.speed-mode #aurora,body.speed-mode #vignette{display:none}
   kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-bottom-width:2px;
     border-radius:5px;padding:1px 5px;font-size:9.5px;color:#dbe4ff}
-  @media(max-width:720px){ #panel{width:calc(100vw - 32px)} #hint{display:none} h1{font-size:15px} }
+  @media(max-width:720px){
+    #panel{width:calc(100vw - 32px)}
+    #hint{
+      right:16px;
+      max-width:calc(100vw - 32px);
+      padding:6px 8px;
+      border:1px solid rgba(150,180,255,.14);
+      border-radius:8px;
+      background:rgba(5,6,15,.72);
+      font-size:9px;
+      line-height:1.55;
+    }
+    h1{font-size:15px}
+  }
 </style>
 </head>
 <body>
@@ -160,7 +177,7 @@
     <button id="b_bounds">EDGE: BOUNCE</button>
     <button id="b_links">LINKS: OFF</button>
     <button id="b_wellviz" class="on">WELLS: SHOWN</button>
-    <button id="b_quality" class="wide">QUALITY: AUTO</button>
+    <button id="b_quality" class="wide">QUALITY: SPEED (30 FPS)</button>
   </div>
 
   <div class="sec">ACTIONS</div>
@@ -168,6 +185,8 @@
     <button id="b_burst">BURST</button>
     <button id="b_reset">RESET</button>
     <button id="b_pause">PAUSE</button>
+    <button id="b_share" class="wide">SHARE</button>
+    <span id="share_feedback" class="wide" aria-live="polite"></span>
   </div>
 </div>
 
@@ -187,7 +206,10 @@
    ══════════════════════════════════════════════════════════ */
 
 const cvs = document.getElementById('c');
-const ctx = cvs.getContext('2d', { alpha:false, desynchronized:true });
+// Let the browser coordinate canvas presentation with the display refresh.
+// desynchronized canvases can reduce latency, but may produce uneven pacing
+// when the main thread is close to its frame budget.
+const ctx = cvs.getContext('2d', { alpha:false });
 
 let W = 0, H = 0, DPR = 1;
 
@@ -317,7 +339,7 @@ function spawn(i, kind){
 function reseed(kind){ for (let i = 0; i < N; i++) spawn(i, kind); }
 
 /* ─────────── resize + adaptive resolution ─────────── */
-let qualMode = 0;          // 0 AUTO · 1 HIGH · 2 BALANCED · 3 SPEED
+let qualMode = 3;          // 0 AUTO · 1 HIGH · 2 BALANCED · 3 SPEED (30 fps)
 let autoScale = 1;
 const QUAL_NAMES = ['AUTO', 'HIGH', 'BALANCED', 'SPEED'];
 
@@ -551,8 +573,9 @@ function render(){
     ctx.stroke();
   }
 
-  // wells
-  if (P.wellViz){
+  // Wells are a decorative layer. Keep their gradients out of the hot path
+  // in SPEED mode, which is useful on software-composited systems.
+  if (P.wellViz && qualMode !== 3){
     for (let w = 0; w < (P.wells | 0); w++){
       const wl = wells[w];
       const pulse = 1 + Math.sin(performance.now() / 320 + w) * 0.14;
@@ -611,20 +634,38 @@ function render(){
 }
 
 /* ─────────── loop ─────────── */
-let last = performance.now(), fps = 60, acc = 0, frames = 0, lastQual = 0;
+const SIM_DT = 1 / 60;
+const MAX_SIM_STEPS = 1;
+const SPEED_FRAME_MS = 1000 / 30;
+let last = performance.now(), nextSpeedFrame = last, simTime = 0;
+let fps = 60, acc = 0, frames = 0, lastQual = 0;
 const el = id => document.getElementById(id);
 
 function frame(now){
   requestAnimationFrame(frame);
+  if (qualMode === 3){
+    if (now < nextSpeedFrame) return;
+    // Reset from the current timestamp instead of catching up. This avoids
+    // back-to-back renders after a delayed callback.
+    nextSpeedFrame = now + SPEED_FRAME_MS;
+  }
   let dt = (now - last) / 1000;
   last = now;
   // guard against clock skew / tab-switch spikes — a bad dt must never poison the sim
   if (!(dt > 0)) dt = 0; else if (dt > 0.05) dt = 0.05;
 
   if (!P.paused && dt > 0){
-    const steps = dt > 0.024 ? 2 : 1;
-    const sdt = dt / steps;
-    for (let s = 0; s < steps; s++) physics(sdt);
+    simTime += dt;
+    let steps = 0;
+    // Never do catch-up work beyond the current frame budget. Dropping a
+    // small amount of simulation time is preferable to a visible burst of
+    // extra work that causes another missed presentation deadline.
+    while (simTime >= SIM_DT && steps < MAX_SIM_STEPS){
+      physics(SIM_DT);
+      simTime -= SIM_DT;
+      steps++;
+    }
+    if (steps === MAX_SIM_STEPS && simTime >= SIM_DT) simTime = 0;
   }
   render();
 
@@ -725,11 +766,7 @@ el('b_wellviz').addEventListener('click', () => {
   el('b_wellviz').classList.toggle('on', P.wellViz);
 });
 el('b_quality').addEventListener('click', () => {
-  qualMode = (qualMode + 1) % 4;
-  if (qualMode === 0) autoScale = 1;
-  el('b_quality').textContent = 'QUALITY: ' + QUAL_NAMES[qualMode];
-  el('b_quality').classList.toggle('on', qualMode !== 0);
-  resize();
+  setQualityMode((qualMode + 1) % 4);
 });
 el('b_burst').addEventListener('click', () => burst(W/2, H/2));
 el('b_reset').addEventListener('click', () => { buildWells(); reseed('rand'); });
@@ -737,6 +774,110 @@ el('b_pause').addEventListener('click', () => {
   P.paused = !P.paused;
   el('b_pause').textContent = P.paused ? 'RESUME' : 'PAUSE';
   el('b_pause').classList.toggle('on', P.paused);
+});
+
+function setQualityMode(mode){
+  qualMode = mode;
+  if (qualMode === 0) autoScale = 1;
+  document.body.classList.toggle('speed-mode', qualMode === 3);
+  el('b_quality').textContent = qualMode === 3
+    ? 'QUALITY: SPEED (30 FPS)'
+    : 'QUALITY: ' + QUAL_NAMES[qualMode];
+  el('b_quality').classList.toggle('on', qualMode !== 0);
+  resize();
+}
+
+function serializeState(){
+  const params = new URLSearchParams();
+  params.set('ver', '1');
+  const sliderKeys = {
+    count: 'n', grav: 'g', press: 'p', coh: 'ch', visc: 'vi', rad: 'r',
+    drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf',
+    trail: 'tr', size: 'sz', glow: 'gl'
+  };
+  for (const [key, shortKey] of Object.entries(sliderKeys)){
+    params.set(shortKey, S[key].value);
+  }
+  params.set('color', P.colorMode);
+  params.set('bounds', P.bounds);
+  params.set('links', P.links ? '1' : '0');
+  params.set('wellviz', P.wellViz ? '1' : '0');
+  params.set('quality', qualMode);
+
+  const url = new URL(window.location.href);
+  url.search = params.toString();
+  url.hash = '';
+  return url.toString();
+}
+
+function boundedNumber(params, key, control, integer){
+  if (!params.has(key)) return null;
+  const value = integer ? parseInt(params.get(key), 10) : parseFloat(params.get(key));
+  const min = parseFloat(control.min), max = parseFloat(control.max);
+  const step = parseFloat(control.step) || 1;
+  if (!Number.isFinite(value) || value < min || value > max) return null;
+  if (Math.abs((value - min) / step - Math.round((value - min) / step)) > 1e-6) return null;
+  return value;
+}
+
+function loadFromURL(){
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has('ver')) return false;
+
+  const sliderKeys = {
+    count: 'n', grav: 'g', press: 'p', coh: 'ch', visc: 'vi', rad: 'r',
+    drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf',
+    trail: 'tr', size: 'sz', glow: 'gl'
+  };
+  for (const [key, shortKey] of Object.entries(sliderKeys)){
+    const control = S[key];
+    const value = boundedNumber(params, shortKey, control, control.step === '1');
+    if (value !== null) setSlider(key, value);
+  }
+
+  const color = parseInt(params.get('color'), 10);
+  if (Number.isInteger(color) && color >= 0 && color < COLOR_NAMES.length){
+    P.colorMode = color;
+    el('b_color').textContent = 'COLOR: ' + COLOR_NAMES[color];
+  }
+  const bounds = parseInt(params.get('bounds'), 10);
+  if (Number.isInteger(bounds) && bounds >= 0 && bounds < BOUND_NAMES.length){
+    P.bounds = bounds;
+    el('b_bounds').textContent = 'EDGE: ' + BOUND_NAMES[bounds];
+  }
+  if (params.has('links')) {
+    P.links = params.get('links') === '1';
+    el('b_links').textContent = 'LINKS: ' + (P.links ? 'ON' : 'OFF');
+    el('b_links').classList.toggle('on', P.links);
+  }
+  if (params.has('wellviz')) {
+    P.wellViz = params.get('wellviz') === '1';
+    el('b_wellviz').textContent = 'WELLS: ' + (P.wellViz ? 'SHOWN' : 'HIDDEN');
+    el('b_wellviz').classList.toggle('on', P.wellViz);
+  }
+  const quality = parseInt(params.get('quality'), 10);
+  if (Number.isInteger(quality) && quality >= 0 && quality < QUAL_NAMES.length){
+    setQualityMode(quality);
+  }
+  el('s_mode').textContent = 'shared configuration';
+  return true;
+}
+
+el('b_share').addEventListener('click', () => {
+  const url = serializeState();
+  const feedback = el('share_feedback');
+  const showFeedback = text => {
+    feedback.textContent = text;
+    clearTimeout(showFeedback.timer);
+    showFeedback.timer = setTimeout(() => { feedback.textContent = ''; }, 2200);
+  };
+  if (navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(url)
+      .then(() => showFeedback('URL COPIED'))
+      .catch(() => window.prompt('Copy this URL:', url));
+  } else {
+    window.prompt('Copy this URL:', url);
+  }
 });
 
 /* ─────────── presets ─────────── */
@@ -810,6 +951,8 @@ window.addEventListener('keydown', e => {
 /* boot */
 ptr.x = window.innerWidth / 2; ptr.y = window.innerHeight / 2;
 applyPreset('nebula');
+setQualityMode(3);
+loadFromURL();
 })();
 </script>
 </body>
