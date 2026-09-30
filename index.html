@@ -226,6 +226,7 @@
   <kbd>1</kbd>–<kbd>7</kbd> presets &nbsp; <kbd>C</kbd> color &nbsp; <kbd>L</kbd> links &nbsp; <kbd>P</kbd> pause &nbsp; <kbd>R</kbd> reset &nbsp; <kbd>H</kbd> hide UI
 </div>
 
+
 <script>
 "use strict";
 (() => {
@@ -818,15 +819,72 @@ function pos(e){
   ptr.px = ptr.x; ptr.py = ptr.y;
   ptr.x = t.clientX; ptr.y = t.clientY;
 }
+// a "tap" — a quick down→up with little movement — fires a shockwave;
+// anything longer or that drags becomes the normal push/pull pointer force
+// instead, so taps and drags don't fight each other.
+const TAP_MAX_MS = 280, TAP_MAX_DRIFT = 14;
+let tap = { x: 0, y: 0, t: 0, moved: false };
+
+function tapStart(x, y){
+  ptr.px = ptr.x; ptr.py = ptr.y; ptr.x = x; ptr.y = y; ptr.down = true;
+  tap.x = x; tap.y = y; tap.t = performance.now(); tap.moved = false;
+}
+function tapMove(x, y){
+  ptr.px = ptr.x; ptr.py = ptr.y; ptr.x = x; ptr.y = y;
+  if (ptr.down && Math.hypot(x - tap.x, y - tap.y) > TAP_MAX_DRIFT) tap.moved = true;
+}
+function tapEnd(x, y){
+  const willBurst = ptr.down && !tap.moved && performance.now() - tap.t <= TAP_MAX_MS;
+  if (willBurst) burst(x, y);
+  ptr.down = false;
+}
+
+// Mouse/pen path: Pointer Events (gives us right-click / shift-drag repel).
+// Real touch input is deliberately excluded here (pointerType !== 'mouse'
+// guards below) and instead handled via the classic Touch Events block,
+// because WebKit/iOS pointer-capture + pointerup delivery has proven
+// unreliable for this app in the field, while touchstart/end is the
+// oldest and most consistently supported iOS gesture API.
 cvs.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') return;
   cvs.setPointerCapture(e.pointerId);
-  pos(e); ptr.down = true;
+  tapStart(e.clientX, e.clientY);
   ptr.mode = (e.button === 2 || e.shiftKey) ? 1 : 0;
 });
-cvs.addEventListener('pointermove', e => { pos(e); if (e.shiftKey && ptr.down) ptr.mode = 1; });
-window.addEventListener('pointerup', () => { ptr.down = false; });
+cvs.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch') return;
+  tapMove(e.clientX, e.clientY);
+  if (e.shiftKey && ptr.down) ptr.mode = 1;
+});
+cvs.addEventListener('pointerup', e => {
+  if (e.pointerType === 'touch') return;
+  tapEnd(e.clientX, e.clientY);
+});
+cvs.addEventListener('pointercancel', e => {
+  if (e.pointerType === 'touch') return;
+  ptr.down = false;
+});
 cvs.addEventListener('contextmenu', e => e.preventDefault());
 cvs.addEventListener('dblclick', e => { pos(e); burst(ptr.x, ptr.y); });
+
+// Touch path: plain Touch Events, independent of the Pointer Events above.
+cvs.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  ptr.mode = 0;
+  tapStart(t.clientX, t.clientY);
+}, { passive: false });
+cvs.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  tapMove(t.clientX, t.clientY);
+}, { passive: false });
+cvs.addEventListener('touchend', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  tapEnd(t.clientX, t.clientY);
+}, { passive: false });
+cvs.addEventListener('touchcancel', () => { ptr.down = false; });
 
 function burst(x, y, power){
   waves.push({
