@@ -2,7 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<!-- iOS "Add to Home Screen" support: launches without Safari's address bar/toolbar (true fullscreen on iPhone) -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Particle Forge" />
+<!-- iOS 12 and earlier require an exact-resolution launch/splash image for
+     standalone home-screen apps; without one, iOS silently substitutes a
+     mismatched default and locks the WebView's content viewport to that
+     wrong size, leaving a permanent black strip. This entry matches the
+     iPhone 6/6s/7/8 Plus portrait screen (414x736pt @3x = 1242x2208px). -->
+<link rel="apple-touch-startup-image" href="splash-1242x2208.png"
+      media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
 <title>PARTICLE FORGE — interactive physics playground</title>
 <style>
   :root{
@@ -15,7 +26,8 @@
     --accent2:#ff5edb;
   }
   *{box-sizing:border-box}
-  html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;
+  html,body{height:100%;height:100dvh;margin:0;background:var(--bg);overflow:hidden;
+    position:fixed;inset:0;width:100%;
     font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--txt);
     -webkit-tap-highlight-color:transparent;}
   canvas{display:block;position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
@@ -34,7 +46,8 @@
     background:radial-gradient(120% 90% at 50% 50%, transparent 45%, rgba(0,0,0,.72) 100%);}
 
   /* ---------- HUD ---------- */
-  #hud{position:fixed;top:16px;left:16px;z-index:5;pointer-events:none;user-select:none}
+  #hud{position:fixed;top:calc(16px + env(safe-area-inset-top));left:calc(16px + env(safe-area-inset-left));z-index:5;pointer-events:none;user-select:none}
+  #hud h1, #sub, #hint{display:none}
   h1{margin:0;font-size:20px;letter-spacing:.34em;font-weight:700;
      background:linear-gradient(90deg,#6ef3ff,#a77bff 40%,#ff5edb 70%,#ffd166);
      -webkit-background-clip:text;background-clip:text;color:transparent;
@@ -48,7 +61,7 @@
   #fpsfill{height:100%;width:100%;background:linear-gradient(90deg,#6ef3ff,#7CFFA0);transition:width .12s linear}
 
   /* ---------- Panel ---------- */
-  #panel{position:fixed;top:16px;right:16px;z-index:6;width:288px;max-height:calc(100vh - 32px);
+  #panel{position:fixed;top:calc(16px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));z-index:6;width:288px;max-height:calc(100vh - 32px);
     overflow-y:auto;overflow-x:hidden;padding:40px 14px 14px;border-radius:16px;
     background:var(--glass);border:1px solid var(--stroke);
     backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
@@ -82,12 +95,15 @@
   button:active{transform:translateY(0) scale(.97)}
   button.on{background:linear-gradient(135deg,rgba(110,243,255,.28),rgba(255,94,219,.28));
     border-color:rgba(160,220,255,.65);color:#fff;box-shadow:0 0 16px rgba(110,243,255,.25)}
-  #toggle{position:fixed;top:16px;right:16px;z-index:7;width:38px;height:38px;padding:0;border-radius:11px;
+  #toggle{position:fixed;top:calc(16px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));z-index:7;width:38px;height:38px;padding:0;border-radius:11px;
     font-size:15px;display:none;place-items:center;background:var(--glass);backdrop-filter:blur(12px)}
   #toggle.show{display:grid}
+  #imuBtn{position:fixed;top:calc(16px + env(safe-area-inset-top));right:calc(62px + env(safe-area-inset-right));z-index:7;border-radius:11px;font-size:10px;
+    background:var(--glass);backdrop-filter:blur(12px);display:none}
+  #imuBtn.show{display:block}
   #closePanel{position:absolute;top:10px;right:10px;z-index:1;width:26px;height:26px;padding:0;
     display:grid;place-items:center;font-size:12px;line-height:1;border-radius:8px}
-  #hint{position:fixed;bottom:14px;left:16px;z-index:5;font-size:10.5px;color:var(--dim);
+  #hint{position:fixed;bottom:calc(14px + env(safe-area-inset-bottom));left:calc(16px + env(safe-area-inset-left));z-index:5;font-size:10.5px;color:var(--dim);
     letter-spacing:.06em;line-height:1.75;pointer-events:none;user-select:none}
   #share_feedback{min-height:1.2em;color:var(--accent);font-size:10px;text-align:center}
   body.speed-mode #aurora,body.speed-mode #vignette{display:none}
@@ -120,23 +136,25 @@
   <div id="stats">
     <div><b id="s_fps">60</b> fps &nbsp;·&nbsp; <b id="s_n">0</b> particles &nbsp;·&nbsp; <b id="s_pairs">0</b>k pairs &nbsp;·&nbsp; <b id="s_res">1.00</b>x res</div>
     <div id="s_mode">preset: nebula</div>
+    <div id="s_imu">imu: idle</div>
     <div id="fpsbar"><div id="fpsfill"></div></div>
   </div>
 </div>
 
-<button id="toggle" title="Show controls (H)">☰</button>
+<button id="imuBtn" title="Toggle tilt / shake controls">📱 MOTION: OFF</button>
+<button id="toggle" class="show" title="Show controls (H)">☰</button>
 
-<div id="panel">
+<div id="panel" class="hidden">
   <button id="closePanel" title="Hide controls (H)">✕</button>
   <div class="sec">PRESETS</div>
   <div class="grid3">
-    <button data-preset="nebula" class="on">NEBULA</button>
+    <button data-preset="nebula">NEBULA</button>
     <button data-preset="fluid">FLUID</button>
     <button data-preset="galaxy">GALAXY</button>
     <button data-preset="storm">STORM</button>
     <button data-preset="web">WEB</button>
     <button data-preset="zerog">ZERO-G</button>
-    <button data-preset="foam">FOAM</button>
+    <button data-preset="sun" class="on">SUN</button>
   </div>
 
   <div class="sec">SIMULATION</div>
@@ -164,6 +182,8 @@
   <input type="range" id="r_mass" min="0" max="300" step="5" value="100">
   <div class="row"><span>pointer force</span><span id="v_ptr">1.00</span></div>
   <input type="range" id="r_ptr" min="0" max="300" step="5" value="100">
+  <div class="row"><span>tilt force</span><span id="v_tilt">1.00</span></div>
+  <input type="range" id="r_tilt" min="0" max="300" step="5" value="100">
 
   <div class="sec">RENDER</div>
   <div class="row"><span>trail persistence</span><span id="v_trail">0.86</span></div>
@@ -192,6 +212,7 @@
 
 <div id="hint">
   <kbd>drag</kbd> attract &nbsp; <kbd>shift+drag</kbd> / <kbd>right-drag</kbd> repel &nbsp; <kbd>space</kbd> shockwave<br>
+  <kbd>tilt</kbd> steer field &nbsp; <kbd>shake</kbd> shockwave &nbsp; (tap 📱 to enable)<br>
   <kbd>1</kbd>–<kbd>7</kbd> presets &nbsp; <kbd>C</kbd> color &nbsp; <kbd>L</kbd> links &nbsp; <kbd>P</kbd> pause &nbsp; <kbd>R</kbd> reset &nbsp; <kbd>H</kbd> hide UI
 </div>
 
@@ -234,8 +255,68 @@ const P = {
   trail: 0.86, size: 1, glow: 0.85,
   bounds: 0,            // 0 bounce · 1 wrap · 2 void
   colorMode: 0,         // 0 velocity · 1 density · 2 spectrum · 3 heat
-  links: false, wellViz: true, paused: false
+  links: false, wellViz: true, paused: false,
+  tilt: 1               // device-orientation tilt force multiplier
 };
+
+/* ─────────── IMU (device orientation / motion) ─────────── */
+// tilt.x/.y: unit-ish directional force derived from device beta/gamma,
+// applied as an extra field in physics() alongside gravity/wells/pointer.
+const tilt = { x: 0, y: 0, active: false };
+let shakeMag = 0;
+const SHAKE_THRESHOLD = 18;    // accel delta (m/s^2) above gravity baseline that counts as a shake
+let lastShakeAt = 0;
+let imuEnabled = false;
+let imuPermissionRequested = false;
+
+function handleOrientation(e){
+  if (!imuEnabled) return;
+  if (e.beta === null && e.gamma === null) return;
+  tilt.active = true;
+  const beta = e.beta || 0;    // front-back, -180..180
+  const gamma = e.gamma || 0;  // left-right, -90..90
+  tilt.x = clampN(gamma / 45, -2, 2);
+  tilt.y = clampN(beta / 45, -2, 2);
+  updateImuHud(beta, gamma);
+}
+
+function handleMotion(e){
+  if (!imuEnabled) return;
+  const a = e.accelerationIncludingGravity || e.acceleration;
+  if (!a) return;
+  const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
+  const delta = Math.abs(mag - 9.8);
+  shakeMag = shakeMag * 0.8 + delta * 0.2;
+  const now = performance.now();
+  if (shakeMag > SHAKE_THRESHOLD && now - lastShakeAt > 500){
+    lastShakeAt = now;
+    burst(W/2 + (Math.random()-0.5)*W*0.3, H/2 + (Math.random()-0.5)*H*0.3, 8200);
+  }
+}
+
+function clampN(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
+
+async function requestImuPermission(){
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function'){
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res === 'granted') window.addEventListener('deviceorientation', handleOrientation);
+    } else {
+      window.addEventListener('deviceorientation', handleOrientation);
+    }
+  } catch(err){ /* not supported / denied */ }
+
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' &&
+        typeof DeviceMotionEvent.requestPermission === 'function'){
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res === 'granted') window.addEventListener('devicemotion', handleMotion);
+    } else {
+      window.addEventListener('devicemotion', handleMotion);
+    }
+  } catch(err){ /* not supported / denied */ }
+}
 const COLOR_NAMES  = ['VELOCITY','DENSITY','SPECTRUM','HEAT'];
 const BOUND_NAMES  = ['BOUNCE','WRAP','VOID'];
 
@@ -351,18 +432,44 @@ function pixelRatio(){
   return Math.max(0.6, Math.min(dev, 1.75) * autoScale);
 }
 
+// iOS standalone (home-screen) apps can report a stale/short window.innerHeight
+// on first layout — visualViewport tracks the true on-screen size more reliably
+// and avoids a black strip at the bottom where the canvas fell short.
+function viewportSize(){
+  const vv = window.visualViewport;
+  return vv ? { w: vv.width, h: vv.height } : { w: window.innerWidth, h: window.innerHeight };
+}
+
 function resize(){
   DPR = pixelRatio();
-  W = window.innerWidth; H = window.innerHeight;
+  const v = viewportSize();
+  W = v.w; H = v.h;
   cvs.width  = Math.max(1, Math.floor(W * DPR));
   cvs.height = Math.max(1, Math.floor(H * DPR));
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#05060f';
   ctx.fillRect(0, 0, W, H);
+  // Older iOS (standalone, black-translucent status bar) sometimes leaves the
+  // page's own scroll view offset by a few points to compensate for the
+  // status bar overlay — this exposes native black chrome at the opposite
+  // edge even though every element is sized/positioned correctly. Forcing
+  // scroll back to the origin after every layout pass clears that offset.
+  window.scrollTo(0, 0);
 }
 window.addEventListener('resize', () => { const o = W || 1, p = H || 1; resize();
   for (let i = 0; i < N; i++){ px[i] *= W / o; py[i] *= H / p; } });
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', () => { const o = W || 1, p = H || 1; resize();
+    for (let i = 0; i < N; i++){ px[i] *= W / o; py[i] *= H / p; } });
+}
 resize();
+// Re-measure shortly after boot and whenever the page is (re)shown: standalone
+// iOS apps can settle their true layout size a frame or two after this script
+// first runs, so one resize() at load time isn't always enough.
+setTimeout(resize, 300);
+window.addEventListener('pageshow', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 300));
+document.addEventListener('scroll', () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); }, { passive: true });
 reseed('rand');
 
 /* ─────────── physics ─────────── */
@@ -437,9 +544,10 @@ function physics(dt){
   const dragK = Math.pow(1 - P.drag, dt * 60);
   const pf = P.pointer;
   const bounds = P.bounds;
+  const tiltAx = tilt.x * P.tilt * 550, tiltAy = tilt.y * P.tilt * 550;
 
   for (let i = 0; i < N; i++){
-    let ax = 0, ay = grav * 10;
+    let ax = tiltAx, ay = grav * 10 + tiltAy;
     const x = px[i], y = py[i];
 
     // gravity wells (softened newtonian) + tangential vortex
@@ -718,6 +826,31 @@ function burst(x, y, power){
   });
 }
 
+function updateImuHud(beta, gamma){
+  el('s_imu').textContent = `imu: β${beta.toFixed(0)}° γ${gamma.toFixed(0)}°`;
+}
+
+const imuBtn = el('imuBtn');
+if (typeof window.DeviceOrientationEvent !== 'undefined' ||
+    typeof window.DeviceMotionEvent !== 'undefined'){
+  imuBtn.classList.add('show');
+}
+imuBtn.addEventListener('click', async () => {
+  if (!imuPermissionRequested){
+    await requestImuPermission();
+    imuPermissionRequested = true;
+  }
+  imuEnabled = !imuEnabled;
+  imuBtn.textContent = imuEnabled ? '📱 MOTION: ON' : '📱 MOTION: OFF';
+  imuBtn.classList.toggle('on', imuEnabled);
+  if (!imuEnabled){
+    tilt.x = 0; tilt.y = 0; tilt.active = false; shakeMag = 0;
+    el('s_imu').textContent = 'imu: off';
+  } else {
+    el('s_imu').textContent = 'imu: waiting for data…';
+  }
+});
+
 /* ─────────── UI wiring ─────────── */
 function slider(id, valId, fn, fmt){
   const r = el(id), v = el(valId);
@@ -741,6 +874,7 @@ S.spin  = slider('r_spin','v_spin',  x => P.spin = x/100,       x => (x/100).toF
 S.wells = slider('r_wells','v_wells',x => P.wells = x,          x => x);
 S.mass  = slider('r_mass','v_mass',  x => P.wellMass = x/100,   x => (x/100).toFixed(2));
 S.ptr   = slider('r_ptr','v_ptr',    x => P.pointer = x/100,    x => (x/100).toFixed(2));
+S.tilt  = slider('r_tilt','v_tilt',  x => P.tilt = x/100,       x => (x/100).toFixed(2));
 S.trail = slider('r_trail','v_trail',x => P.trail = x/100,      x => (x/100).toFixed(2));
 S.size  = slider('r_size','v_size',  x => P.size = x/100,       x => (x/100).toFixed(2));
 S.glow  = slider('r_glow','v_glow',  x => P.glow = x/100,       x => (x/100).toFixed(2));
@@ -792,7 +926,7 @@ function serializeState(){
   params.set('ver', '1');
   const sliderKeys = {
     count: 'n', grav: 'g', press: 'p', coh: 'ch', visc: 'vi', rad: 'r',
-    drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf',
+    drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf', tilt: 'tf',
     trail: 'tr', size: 'sz', glow: 'gl'
   };
   for (const [key, shortKey] of Object.entries(sliderKeys)){
@@ -826,7 +960,7 @@ function loadFromURL(){
 
   const sliderKeys = {
     count: 'n', grav: 'g', press: 'p', coh: 'ch', visc: 'vi', rad: 'r',
-    drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf',
+    drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf', tilt: 'tf',
     trail: 'tr', size: 'sz', glow: 'gl'
   };
   for (const [key, shortKey] of Object.entries(sliderKeys)){
@@ -900,8 +1034,8 @@ const PRESETS = {
   zerog:  { seed:'rand', color:2, bounds:1, links:false, s:{
     count:4200, grav:0, press:560, coh:0, visc:0, rad:14, drag:0, spin:0,
     wells:0, mass:0, ptr:120, trail:70, size:85, glow:70 } },
-  foam:   { seed:'rand', color:1, bounds:2, links:false, s:{
-    count:5100, grav:0, press:900, coh:0, visc:8, rad:40, drag:0, spin:88,
+  sun:    { seed:'rand', color:1, bounds:2, links:false, s:{
+    count:800, grav:0, press:900, coh:0, visc:8, rad:40, drag:0, spin:88,
     wells:0, mass:150, ptr:160, trail:90, size:95, glow:95 } }
 };
 
@@ -931,7 +1065,7 @@ toggle.addEventListener('click', () => {
 closePanel.addEventListener('click', () => {
   panel.classList.add('hidden'); toggle.classList.add('show');
 });
-const order = ['nebula','fluid','galaxy','storm','web','zerog','foam'];
+const order = ['nebula','fluid','galaxy','storm','web','zerog','sun'];
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   const k = e.key.toLowerCase();
@@ -948,9 +1082,23 @@ window.addEventListener('keydown', e => {
   }
 });
 
+/* iOS standalone home-screen apps don't unload on close — the OS just
+   suspends the WKWebView, so all JS state (particles, sliders, presets)
+   survives across relaunches from the icon. Force a full reload whenever
+   the app returns from being backgrounded/hidden, so every reopen behaves
+   like a genuine cold start instead of resuming exactly where it left off. */
+let wasHidden = false;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden'){
+    wasHidden = true;
+  } else if (document.visibilityState === 'visible' && wasHidden){
+    location.reload();
+  }
+});
+
 /* boot */
-ptr.x = window.innerWidth / 2; ptr.y = window.innerHeight / 2;
-applyPreset('nebula');
+{ const v = viewportSize(); ptr.x = v.w / 2; ptr.y = v.h / 2; }
+applyPreset('sun');
 setQualityMode(3);
 loadFromURL();
 })();
