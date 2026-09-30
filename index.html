@@ -47,7 +47,17 @@
 
   /* ---------- HUD ---------- */
   #hud{position:fixed;top:calc(16px + env(safe-area-inset-top));left:calc(16px + env(safe-area-inset-left));z-index:5;pointer-events:none;user-select:none}
-  #hud h1, #sub, #hint{display:none}
+  /* This branch dedicates the whole screen to the visualization: hide every
+     on-screen text label (titles, stats, hints, panel captions, button
+     labels) while leaving every control's clickable surface intact so the
+     sim remains fully operable via mouse/touch/keyboard without any copy
+     drawn over it. */
+  #hud h1, #sub, #hint, #stats, .sec, .row span, #share_feedback{display:none}
+  #panel button, #closePanel{color:transparent}
+  /* IMU and panel-open buttons are fully removed (not just text-hidden) so
+     the whole screen is dedicated to the visualization; the panel itself
+     stays reachable via the H keyboard shortcut. */
+  #imuBtn, #toggle{display:none !important}
   h1{margin:0;font-size:20px;letter-spacing:.34em;font-weight:700;
      background:linear-gradient(90deg,#6ef3ff,#a77bff 40%,#ff5edb 70%,#ffd166);
      -webkit-background-clip:text;background-clip:text;color:transparent;
@@ -1099,7 +1109,7 @@ document.addEventListener('visibilitychange', () => {
 /* boot */
 { const v = viewportSize(); ptr.x = v.w / 2; ptr.y = v.h / 2; }
 applyPreset('sun');
-setQualityMode(3);
+setQualityMode(2);
 loadFromURL();
 })();
 </script>
