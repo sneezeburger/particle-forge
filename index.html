@@ -192,14 +192,14 @@
   <input type="range" id="r_rad" min="6" max="40" step="1" value="17" title="Interaction radius — how far neighboring particles can affect each other.">
   <div class="row"><span title="Air resistance that drains particle velocity over time.">drag</span><span id="v_drag">0.6%</span></div>
   <input type="range" id="r_drag" min="0" max="80" step="1" value="6" title="Air resistance that drains particle velocity over time.">
-  <div class="row"><span title="Rotational force applied around the force-well centers.">vortex spin</span><span id="v_spin">0.30</span></div>
-  <input type="range" id="r_spin" min="-100" max="100" step="1" value="30" title="Rotational force applied around the force-well centers.">
 
   <div class="sec">FORCE FIELD</div>
   <div class="row"><span title="Number of attracting/repelling gravity wells active in the scene.">wells</span><span id="v_wells">3</span></div>
   <input type="range" id="r_wells" min="0" max="8" step="1" value="3" title="Number of attracting/repelling gravity wells active in the scene.">
   <div class="row"><span title="Strength of each force well's pull.">well mass</span><span id="v_mass">1.00</span></div>
   <input type="range" id="r_mass" min="0" max="300" step="5" value="100" title="Strength of each force well's pull.">
+  <div class="row"><span title="Rotational force applied around the force-well centers (no effect without wells).">vortex spin</span><span id="v_spin">0.30</span></div>
+  <input type="range" id="r_spin" min="-100" max="100" step="1" value="30" title="Rotational force applied around the force-well centers (no effect without wells).">
   <div class="row"><span title="How strongly your pointer or touch attracts/repels nearby particles.">pointer force</span><span id="v_ptr">1.00</span></div>
   <input type="range" id="r_ptr" min="0" max="300" step="5" value="100" title="How strongly your pointer or touch attracts/repels nearby particles.">
   <div class="row"><span title="How strongly device tilt (motion sensors) steers particles.">tilt force</span><span id="v_tilt">1.00</span></div>
