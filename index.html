@@ -168,64 +168,64 @@
   <button id="closePanel" title="Hide controls (H)">✕</button>
   <div class="sec">PRESETS</div>
   <div class="grid3">
-    <button data-preset="nebula">NEBULA</button>
-    <button data-preset="fluid">FLUID</button>
-    <button data-preset="galaxy">GALAXY</button>
-    <button data-preset="storm">STORM</button>
-    <button data-preset="web">WEB</button>
-    <button data-preset="zerog">ZERO-G</button>
-    <button data-preset="sun" class="on">SUN</button>
+    <button data-preset="nebula" title="Drifting colorful cloud with gentle cohesion and soft force wells">NEBULA</button>
+    <button data-preset="fluid" title="Thick, syrupy fluid that sloshes and bounces off the edges">FLUID</button>
+    <button data-preset="galaxy" title="Orbiting disc of particles swirling around twin gravity wells">GALAXY</button>
+    <button data-preset="storm" title="Chaotic turbulence with spinning vortices and many force wells">STORM</button>
+    <button data-preset="web" title="Sparse mesh of linked particles tracing a web-like structure">WEB</button>
+    <button data-preset="zerog" title="Free-floating particles with no gravity or cohesion">ZERO-G</button>
+    <button data-preset="sun" class="on" title="Dense, fast-spinning hot core pushing particles outward">SUN</button>
   </div>
 
   <div class="sec">SIMULATION</div>
-  <div class="row"><span>particles</span><span id="v_count">2600</span></div>
-  <input type="range" id="r_count" min="300" max="9000" step="100" value="2600">
-  <div class="row"><span>gravity</span><span id="v_grav">0.00</span></div>
-  <input type="range" id="r_grav" min="-40" max="80" step="1" value="0">
-  <div class="row"><span>pressure</span><span id="v_press">340</span></div>
-  <input type="range" id="r_press" min="0" max="900" step="10" value="340">
-  <div class="row"><span>cohesion</span><span id="v_coh">120</span></div>
-  <input type="range" id="r_coh" min="0" max="500" step="5" value="120">
-  <div class="row"><span>viscosity</span><span id="v_visc">0.14</span></div>
-  <input type="range" id="r_visc" min="0" max="100" step="1" value="14">
-  <div class="row"><span>radius</span><span id="v_rad">17</span></div>
-  <input type="range" id="r_rad" min="6" max="40" step="1" value="17">
-  <div class="row"><span>drag</span><span id="v_drag">0.6%</span></div>
-  <input type="range" id="r_drag" min="0" max="80" step="1" value="6">
-  <div class="row"><span>vortex spin</span><span id="v_spin">0.30</span></div>
-  <input type="range" id="r_spin" min="-100" max="100" step="1" value="30">
+  <div class="row"><span title="Number of particles simulated. Higher values add detail but cost FPS.">particles</span><span id="v_count">2600</span></div>
+  <input type="range" id="r_count" min="300" max="9000" step="100" value="2600" title="Number of particles simulated. Higher values add detail but cost FPS.">
+  <div class="row"><span title="Constant downward (or upward) pull applied to every particle.">gravity</span><span id="v_grav">0.00</span></div>
+  <input type="range" id="r_grav" min="-40" max="80" step="1" value="0" title="Constant downward (or upward) pull applied to every particle.">
+  <div class="row"><span title="Repulsion strength that keeps nearby particles from overlapping.">pressure</span><span id="v_press">340</span></div>
+  <input type="range" id="r_press" min="0" max="900" step="10" value="340" title="Repulsion strength that keeps nearby particles from overlapping.">
+  <div class="row"><span title="Attraction pulling nearby particles together, like surface tension.">cohesion</span><span id="v_coh">120</span></div>
+  <input type="range" id="r_coh" min="0" max="500" step="5" value="120" title="Attraction pulling nearby particles together, like surface tension.">
+  <div class="row"><span title="Damps relative velocity between neighbors, making flow thicker.">viscosity</span><span id="v_visc">0.14</span></div>
+  <input type="range" id="r_visc" min="0" max="100" step="1" value="14" title="Damps relative velocity between neighbors, making flow thicker.">
+  <div class="row"><span title="Interaction radius — how far neighboring particles can affect each other.">radius</span><span id="v_rad">17</span></div>
+  <input type="range" id="r_rad" min="6" max="40" step="1" value="17" title="Interaction radius — how far neighboring particles can affect each other.">
+  <div class="row"><span title="Air resistance that drains particle velocity over time.">drag</span><span id="v_drag">0.6%</span></div>
+  <input type="range" id="r_drag" min="0" max="80" step="1" value="6" title="Air resistance that drains particle velocity over time.">
+  <div class="row"><span title="Rotational force applied around the force-well centers.">vortex spin</span><span id="v_spin">0.30</span></div>
+  <input type="range" id="r_spin" min="-100" max="100" step="1" value="30" title="Rotational force applied around the force-well centers.">
 
   <div class="sec">FORCE FIELD</div>
-  <div class="row"><span>wells</span><span id="v_wells">3</span></div>
-  <input type="range" id="r_wells" min="0" max="8" step="1" value="3">
-  <div class="row"><span>well mass</span><span id="v_mass">1.00</span></div>
-  <input type="range" id="r_mass" min="0" max="300" step="5" value="100">
-  <div class="row"><span>pointer force</span><span id="v_ptr">1.00</span></div>
-  <input type="range" id="r_ptr" min="0" max="300" step="5" value="100">
-  <div class="row"><span>tilt force</span><span id="v_tilt">1.00</span></div>
-  <input type="range" id="r_tilt" min="0" max="300" step="5" value="100">
+  <div class="row"><span title="Number of attracting/repelling gravity wells active in the scene.">wells</span><span id="v_wells">3</span></div>
+  <input type="range" id="r_wells" min="0" max="8" step="1" value="3" title="Number of attracting/repelling gravity wells active in the scene.">
+  <div class="row"><span title="Strength of each force well's pull.">well mass</span><span id="v_mass">1.00</span></div>
+  <input type="range" id="r_mass" min="0" max="300" step="5" value="100" title="Strength of each force well's pull.">
+  <div class="row"><span title="How strongly your pointer or touch attracts/repels nearby particles.">pointer force</span><span id="v_ptr">1.00</span></div>
+  <input type="range" id="r_ptr" min="0" max="300" step="5" value="100" title="How strongly your pointer or touch attracts/repels nearby particles.">
+  <div class="row"><span title="How strongly device tilt (motion sensors) steers particles.">tilt force</span><span id="v_tilt">1.00</span></div>
+  <input type="range" id="r_tilt" min="0" max="300" step="5" value="100" title="How strongly device tilt (motion sensors) steers particles.">
 
   <div class="sec">RENDER</div>
-  <div class="row"><span>trail persistence</span><span id="v_trail">0.86</span></div>
-  <input type="range" id="r_trail" min="0" max="99" step="1" value="86">
-  <div class="row"><span>particle size</span><span id="v_size">1.00</span></div>
-  <input type="range" id="r_size" min="20" max="400" step="5" value="100">
-  <div class="row"><span>glow</span><span id="v_glow">0.85</span></div>
-  <input type="range" id="r_glow" min="0" max="100" step="1" value="85">
+  <div class="row"><span title="How long particle motion trails linger before fading out.">trail persistence</span><span id="v_trail">0.86</span></div>
+  <input type="range" id="r_trail" min="0" max="99" step="1" value="86" title="How long particle motion trails linger before fading out.">
+  <div class="row"><span title="Rendered size of each particle.">particle size</span><span id="v_size">1.00</span></div>
+  <input type="range" id="r_size" min="20" max="400" step="5" value="100" title="Rendered size of each particle.">
+  <div class="row"><span title="Intensity of additive glow/bloom around particles.">glow</span><span id="v_glow">0.85</span></div>
+  <input type="range" id="r_glow" min="0" max="100" step="1" value="85" title="Intensity of additive glow/bloom around particles.">
   <div class="grid">
-    <button id="b_color">COLOR: VELOCITY</button>
-    <button id="b_bounds">EDGE: BOUNCE</button>
-    <button id="b_links">LINKS: OFF</button>
-    <button id="b_wellviz" class="on">WELLS: SHOWN</button>
-    <button id="b_quality" class="wide">QUALITY: SPEED (30 FPS)</button>
+    <button id="b_color" title="Cycle particle coloring mode (velocity / density / spectrum / heat).">COLOR: VELOCITY</button>
+    <button id="b_bounds" title="Cycle what happens at the simulation edges (bounce / wrap / void).">EDGE: BOUNCE</button>
+    <button id="b_links" title="Toggle lines drawn between nearby particles.">LINKS: OFF</button>
+    <button id="b_wellviz" class="on" title="Toggle visibility of force well markers.">WELLS: SHOWN</button>
+    <button id="b_quality" class="wide" title="Cycle render quality / performance mode.">QUALITY: SPEED (30 FPS)</button>
   </div>
 
   <div class="sec">ACTIONS</div>
   <div class="grid3">
-    <button id="b_burst">BURST</button>
-    <button id="b_reset">RESET</button>
-    <button id="b_pause">PAUSE</button>
-    <button id="b_share" class="wide">SHARE</button>
+    <button id="b_burst" title="Trigger an outward shockwave burst from the center.">BURST</button>
+    <button id="b_reset" title="Reset the simulation to its initial state.">RESET</button>
+    <button id="b_pause" title="Pause or resume the simulation.">PAUSE</button>
+    <button id="b_share" class="wide" title="Copy a shareable URL encoding the current settings.">SHARE</button>
     <span id="share_feedback" class="wide" aria-live="polite"></span>
   </div>
 </div>
