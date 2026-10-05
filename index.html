@@ -52,7 +52,7 @@
      labels) while leaving every control's clickable surface intact so the
      sim remains fully operable via mouse/touch/keyboard without any copy
      drawn over it. */
-  #hud h1, #sub, #hint, #stats, .sec, .row span, #share_feedback{display:none}
+  #hud h1, #sub, #hint, .sec, .row span, #share_feedback{display:none}
   #panel button, #closePanel{color:transparent}
   /* IMU and panel-open buttons are fully removed (not just text-hidden) so
      the whole screen is dedicated to the visualization; the panel itself
@@ -116,6 +116,14 @@
   #hint{position:fixed;bottom:calc(14px + env(safe-area-inset-bottom));left:calc(16px + env(safe-area-inset-left));z-index:5;font-size:10.5px;color:var(--dim);
     letter-spacing:.06em;line-height:1.75;pointer-events:none;user-select:none}
   #share_feedback{min-height:1.2em;color:var(--accent);font-size:10px;text-align:center}
+  /* long-press (and other transient action) feedback toast */
+  #toast{position:fixed;top:calc(16px + env(safe-area-inset-top));left:50%;z-index:20;
+    transform:translate(-50%,-14px);padding:9px 18px;border-radius:12px;
+    background:var(--glass);border:1px solid var(--stroke);
+    backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
+    font-size:12px;letter-spacing:.08em;color:#fff;pointer-events:none;user-select:none;
+    opacity:0;transition:opacity .2s ease,transform .2s ease;white-space:nowrap}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
   body.speed-mode #aurora,body.speed-mode #vignette{display:none}
   kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-bottom-width:2px;
     border-radius:5px;padding:1px 5px;font-size:9.5px;color:#dbe4ff}
@@ -139,6 +147,7 @@
 <canvas id="c"></canvas>
 <div id="aurora"></div>
 <div id="vignette"></div>
+<div id="toast"></div>
 
 <div id="hud">
   <h1>PARTICLE&nbsp;FORGE</h1>
@@ -147,6 +156,7 @@
     <div><b id="s_fps">60</b> fps &nbsp;·&nbsp; <b id="s_n">0</b> particles &nbsp;·&nbsp; <b id="s_pairs">0</b>k pairs &nbsp;·&nbsp; <b id="s_res">1.00</b>x res</div>
     <div id="s_mode">preset: nebula</div>
     <div id="s_imu">imu: idle</div>
+    <div id="s_ws">remote: idle</div>
     <div id="fpsbar"><div id="fpsfill"></div></div>
   </div>
 </div>
@@ -278,16 +288,43 @@ let shakeMag = 0;
 const SHAKE_THRESHOLD = 18;    // accel delta (m/s^2) above gravity baseline that counts as a shake
 let lastShakeAt = 0;
 let imuEnabled = false;
-let imuPermissionRequested = false;
+let imuPermissionPromise = null;
+// iOS requires DeviceOrientationEvent.requestPermission() to be invoked
+// synchronously inside the original user gesture (touchstart/pointerdown);
+// calling it later from a setTimeout (as the long-press does) silently
+// fails because gesture/activation context is already lost by then. So we
+// kick this off immediately on every press — it's idempotent (one real
+// permission prompt per session) and guarantees the long-press path has
+// permission already in flight by the time its timer fires.
+function ensureImuPermission(){
+  if (!imuPermissionPromise) imuPermissionPromise = requestImuPermission();
+  return imuPermissionPromise;
+}
 
+// device beta/gamma are reported in the device's own physical frame, not
+// the screen's — so in landscape they need remapping, otherwise tilt is
+// off by 90°. Standard W3C screen-angle compensation (angle 0/90/180/270).
+function screenAngle(){
+  if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
+  if (typeof window.orientation === 'number') return window.orientation;
+  return 0;
+}
 function handleOrientation(e){
   if (!imuEnabled) return;
   if (e.beta === null && e.gamma === null) return;
   tilt.active = true;
-  const beta = e.beta || 0;    // front-back, -180..180
-  const gamma = e.gamma || 0;  // left-right, -90..90
-  tilt.x = clampN(gamma / 45, -2, 2);
-  tilt.y = clampN(beta / 45, -2, 2);
+  const beta = e.beta || 0;    // front-back, -180..180 (device frame)
+  const gamma = e.gamma || 0;  // left-right, -90..90 (device frame)
+  const angle = ((screenAngle() % 360) + 360) % 360;
+  let x, y;
+  switch (angle){
+    case 90:  x = beta;  y = -gamma; break;
+    case 180: x = -gamma; y = -beta; break;
+    case 270: x = -beta; y = gamma;  break;
+    default:  x = gamma; y = beta;   // angle 0 (portrait)
+  }
+  tilt.x = clampN(x / 45, -2, 2);
+  tilt.y = clampN(y / 45, -2, 2);
   updateImuHud(beta, gamma);
 }
 
@@ -823,18 +860,38 @@ function pos(e){
 // anything longer or that drags becomes the normal push/pull pointer force
 // instead, so taps and drags don't fight each other.
 const TAP_MAX_MS = 280, TAP_MAX_DRIFT = 14;
-let tap = { x: 0, y: 0, t: 0, moved: false };
+const LONG_PRESS_MS = 600;
+let tap = { x: 0, y: 0, t: 0, moved: false, longPressed: false };
+let longPressTimer = null;
 
+function cancelLongPress(){
+  if (longPressTimer !== null){ clearTimeout(longPressTimer); longPressTimer = null; }
+}
 function tapStart(x, y){
   ptr.px = ptr.x; ptr.py = ptr.y; ptr.x = x; ptr.y = y; ptr.down = true;
-  tap.x = x; tap.y = y; tap.t = performance.now(); tap.moved = false;
+  tap.x = x; tap.y = y; tap.t = performance.now(); tap.moved = false; tap.longPressed = false;
+  cancelLongPress();
+  // kick off the (idempotent) iOS permission request now, synchronously
+  // inside this real user gesture, so it's already resolved/in-flight by
+  // the time the long-press timer below fires.
+  ensureImuPermission();
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null;
+    if (!ptr.down || tap.moved) return;
+    tap.longPressed = true;
+    toggleImu();
+  }, LONG_PRESS_MS);
 }
 function tapMove(x, y){
   ptr.px = ptr.x; ptr.py = ptr.y; ptr.x = x; ptr.y = y;
-  if (ptr.down && Math.hypot(x - tap.x, y - tap.y) > TAP_MAX_DRIFT) tap.moved = true;
+  if (ptr.down && Math.hypot(x - tap.x, y - tap.y) > TAP_MAX_DRIFT){
+    tap.moved = true;
+    cancelLongPress();
+  }
 }
 function tapEnd(x, y){
-  const willBurst = ptr.down && !tap.moved && performance.now() - tap.t <= TAP_MAX_MS;
+  cancelLongPress();
+  const willBurst = ptr.down && !tap.moved && !tap.longPressed && performance.now() - tap.t <= TAP_MAX_MS;
   if (willBurst) burst(x, y);
   ptr.down = false;
 }
@@ -862,6 +919,7 @@ cvs.addEventListener('pointerup', e => {
 });
 cvs.addEventListener('pointercancel', e => {
   if (e.pointerType === 'touch') return;
+  cancelLongPress();
   ptr.down = false;
 });
 cvs.addEventListener('contextmenu', e => e.preventDefault());
@@ -884,7 +942,16 @@ cvs.addEventListener('touchend', e => {
   const t = e.changedTouches[0];
   tapEnd(t.clientX, t.clientY);
 }, { passive: false });
-cvs.addEventListener('touchcancel', () => { ptr.down = false; });
+cvs.addEventListener('touchcancel', () => { cancelLongPress(); ptr.down = false; });
+
+const toastEl = el('toast');
+let toastTimer = null;
+function showToast(msg, ms = 1500){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+}
 
 function burst(x, y, power){
   waves.push({
@@ -898,16 +965,8 @@ function updateImuHud(beta, gamma){
   el('s_imu').textContent = `imu: β${beta.toFixed(0)}° γ${gamma.toFixed(0)}°`;
 }
 
-const imuBtn = el('imuBtn');
-if (typeof window.DeviceOrientationEvent !== 'undefined' ||
-    typeof window.DeviceMotionEvent !== 'undefined'){
-  imuBtn.classList.add('show');
-}
-imuBtn.addEventListener('click', async () => {
-  if (!imuPermissionRequested){
-    await requestImuPermission();
-    imuPermissionRequested = true;
-  }
+async function toggleImu(){
+  await ensureImuPermission();
   imuEnabled = !imuEnabled;
   imuBtn.textContent = imuEnabled ? '📱 MOTION: ON' : '📱 MOTION: OFF';
   imuBtn.classList.toggle('on', imuEnabled);
@@ -917,7 +976,15 @@ imuBtn.addEventListener('click', async () => {
   } else {
     el('s_imu').textContent = 'imu: waiting for data…';
   }
-});
+  showToast(imuEnabled ? '📱 MOTION: ON' : '📱 MOTION: OFF');
+}
+
+const imuBtn = el('imuBtn');
+if (typeof window.DeviceOrientationEvent !== 'undefined' ||
+    typeof window.DeviceMotionEvent !== 'undefined'){
+  imuBtn.classList.add('show');
+}
+imuBtn.addEventListener('click', toggleImu);
 
 /* ─────────── UI wiring ─────────── */
 function slider(id, valId, fn, fmt){
@@ -949,34 +1016,42 @@ S.glow  = slider('r_glow','v_glow',  x => P.glow = x/100,       x => (x/100).toF
 
 function setSlider(key, val){ S[key].value = val; S[key].dispatchEvent(new Event('input')); }
 
-el('b_color').addEventListener('click', () => {
+function cycleColor(){
   P.colorMode = (P.colorMode + 1) % 4;
   el('b_color').textContent = 'COLOR: ' + COLOR_NAMES[P.colorMode];
-});
-el('b_bounds').addEventListener('click', () => {
+}
+function cycleBounds(){
   P.bounds = (P.bounds + 1) % 3;
   el('b_bounds').textContent = 'EDGE: ' + BOUND_NAMES[P.bounds];
-});
-el('b_links').addEventListener('click', () => {
+}
+function toggleLinks(){
   P.links = !P.links;
   el('b_links').textContent = 'LINKS: ' + (P.links ? 'ON' : 'OFF');
   el('b_links').classList.toggle('on', P.links);
-});
-el('b_wellviz').addEventListener('click', () => {
+}
+function toggleWellViz(){
   P.wellViz = !P.wellViz;
   el('b_wellviz').textContent = 'WELLS: ' + (P.wellViz ? 'SHOWN' : 'HIDDEN');
   el('b_wellviz').classList.toggle('on', P.wellViz);
-});
-el('b_quality').addEventListener('click', () => {
+}
+function cycleQuality(){
   setQualityMode((qualMode + 1) % 4);
-});
-el('b_burst').addEventListener('click', () => burst(W/2, H/2));
-el('b_reset').addEventListener('click', () => { buildWells(); reseed('rand'); });
-el('b_pause').addEventListener('click', () => {
+}
+function resetSim(){ buildWells(); reseed('rand'); }
+function togglePause(){
   P.paused = !P.paused;
   el('b_pause').textContent = P.paused ? 'RESUME' : 'PAUSE';
   el('b_pause').classList.toggle('on', P.paused);
-});
+}
+
+el('b_color').addEventListener('click', cycleColor);
+el('b_bounds').addEventListener('click', cycleBounds);
+el('b_links').addEventListener('click', toggleLinks);
+el('b_wellviz').addEventListener('click', toggleWellViz);
+el('b_quality').addEventListener('click', cycleQuality);
+el('b_burst').addEventListener('click', () => burst(W/2, H/2));
+el('b_reset').addEventListener('click', resetSim);
+el('b_pause').addEventListener('click', togglePause);
 
 function setQualityMode(mode){
   qualMode = mode;
@@ -989,15 +1064,16 @@ function setQualityMode(mode){
   resize();
 }
 
+const SLIDER_KEYS = {
+  count: 'n', grav: 'g', press: 'p', coh: 'ch', visc: 'vi', rad: 'r',
+  drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf', tilt: 'tf',
+  trail: 'tr', size: 'sz', glow: 'gl'
+};
+
 function serializeState(){
   const params = new URLSearchParams();
   params.set('ver', '1');
-  const sliderKeys = {
-    count: 'n', grav: 'g', press: 'p', coh: 'ch', visc: 'vi', rad: 'r',
-    drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf', tilt: 'tf',
-    trail: 'tr', size: 'sz', glow: 'gl'
-  };
-  for (const [key, shortKey] of Object.entries(sliderKeys)){
+  for (const [key, shortKey] of Object.entries(SLIDER_KEYS)){
     params.set(shortKey, S[key].value);
   }
   params.set('color', P.colorMode);
@@ -1026,12 +1102,7 @@ function loadFromURL(){
   const params = new URLSearchParams(window.location.search);
   if (!params.has('ver')) return false;
 
-  const sliderKeys = {
-    count: 'n', grav: 'g', press: 'p', coh: 'ch', visc: 'vi', rad: 'r',
-    drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf', tilt: 'tf',
-    trail: 'tr', size: 'sz', glow: 'gl'
-  };
-  for (const [key, shortKey] of Object.entries(sliderKeys)){
+  for (const [key, shortKey] of Object.entries(SLIDER_KEYS)){
     const control = S[key];
     const value = boundedNumber(params, shortKey, control, control.step === '1');
     if (value !== null) setSlider(key, value);
@@ -1149,6 +1220,61 @@ window.addEventListener('keydown', e => {
     toggle.classList.toggle('show', hid);
   }
 });
+
+/* ─────────── remote control (WebSocket) ───────────
+   A separate device can load remote.html, which connects to the same
+   relay and sends {type:'set',key,value} / {type:'action',name} messages.
+   We apply them here exactly as the local sliders/buttons would, and
+   periodically broadcast our full state so a remote page can sync its
+   own UI (e.g. on first connect) without guessing current values. */
+const REMOTE_ACTIONS = {
+  color: cycleColor, bounds: cycleBounds, links: toggleLinks,
+  wellviz: toggleWellViz, quality: cycleQuality,
+  burst: () => burst(W / 2, H / 2), reset: resetSim, pause: togglePause,
+  imu: toggleImu
+};
+function getStateSnapshot(){
+  const state = { color: P.colorMode, bounds: P.bounds, links: P.links,
+    wellviz: P.wellViz, quality: qualMode, paused: P.paused, imu: imuEnabled };
+  for (const key of Object.keys(SLIDER_KEYS)) state[key] = +S[key].value;
+  return state;
+}
+let remoteWS = null, remoteBroadcastTimer = null, remoteMsgCount = 0;
+function wsStatus(text){ const e = el('s_ws'); if (e) e.textContent = 'remote: ' + text; }
+function connectRemote(){
+  const url = `wss://${location.host}`;
+  wsStatus('connecting…');
+  let ws;
+  try { ws = new WebSocket(url); } catch (err) { wsStatus('error (' + err + ')'); setTimeout(connectRemote, 3000); return; }
+  remoteWS = ws;
+  ws.addEventListener('open', () => {
+    wsStatus('connected · 0 msgs');
+    clearInterval(remoteBroadcastTimer);
+    remoteBroadcastTimer = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN)
+        ws.send(JSON.stringify({ type: 'state', state: getStateSnapshot() }));
+    }, 500);
+  });
+  ws.addEventListener('message', ev => {
+    let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+    remoteMsgCount++;
+    if (msg.type === 'set' && Object.prototype.hasOwnProperty.call(S, msg.key)){
+      setSlider(msg.key, msg.value);
+      wsStatus(`connected · ${remoteMsgCount} msgs · set ${msg.key}=${msg.value}`);
+    } else if (msg.type === 'action' && REMOTE_ACTIONS[msg.name]){
+      REMOTE_ACTIONS[msg.name]();
+      wsStatus(`connected · ${remoteMsgCount} msgs · action ${msg.name}`);
+    }
+  });
+  ws.addEventListener('close', () => {
+    wsStatus('disconnected — retrying…');
+    clearInterval(remoteBroadcastTimer);
+    setTimeout(connectRemote, 3000);
+  });
+  ws.addEventListener('error', () => ws.close());
+}
+connectRemote();
+
 
 /* iOS standalone home-screen apps don't unload on close — the OS just
    suspends the WKWebView, so all JS state (particles, sliders, presets)

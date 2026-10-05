@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>PARTICLE FORGE — remote control</title>
+<style>
+  :root{
+    --bg:#05060f; --glass: rgba(18,20,42,.72); --stroke: rgba(150,180,255,.18);
+    --txt:#dfe6ff; --dim:#8b95c9; --accent:#6ef3ff; --accent2:#ff5edb;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--txt);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    -webkit-tap-highlight-color:transparent;}
+  body{padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));}
+  h1{font-size:15px;letter-spacing:.08em;margin:0 0 4px;color:var(--accent)}
+  #status{font-size:11px;color:var(--dim);margin-bottom:16px}
+  #status.live{color:#7CFC9A}
+  #status.dead{color:var(--accent2)}
+  .sec{font-size:10px;letter-spacing:.12em;color:var(--dim);margin:18px 0 6px;text-transform:uppercase}
+  .row{display:flex;justify-content:space-between;font-size:12px;margin-top:10px}
+  .row span:last-child{color:var(--accent)}
+  input[type=range]{width:100%;accent-color:var(--accent);margin-top:2px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  button{background:var(--glass);border:1px solid var(--stroke);color:var(--txt);
+    border-radius:10px;padding:10px 6px;font:inherit;font-size:11px;letter-spacing:.03em;
+    cursor:pointer;}
+  button.on{border-color:var(--accent);color:var(--accent)}
+  button:active{transform:scale(.97)}
+</style>
+</head>
+<body>
+<h1>PARTICLE FORGE — REMOTE</h1>
+<div id="status">connecting…</div>
+
+<div class="sec">forces</div>
+<div id="sliders"></div>
+
+<div class="sec">toggles</div>
+<div class="grid">
+  <button id="b_color">COLOR</button>
+  <button id="b_bounds">EDGE</button>
+  <button id="b_links">LINKS</button>
+  <button id="b_wellviz">WELLS</button>
+  <button id="b_quality">QUALITY</button>
+  <button id="b_imu">MOTION</button>
+  <button id="b_burst">BURST</button>
+  <button id="b_reset">RESET</button>
+  <button id="b_pause">PAUSE</button>
+</div>
+
+<script>
+const SLIDERS = [
+  { key:'count', label:'particles',         min:300, max:9000, step:100, fmt:x=>x },
+  { key:'grav',  label:'gravity',            min:-40, max:80,   step:1,   fmt:x=>(x/10).toFixed(2) },
+  { key:'press', label:'pressure',           min:0,   max:900,  step:10,  fmt:x=>x },
+  { key:'coh',   label:'cohesion',           min:0,   max:500,  step:5,   fmt:x=>x },
+  { key:'visc',  label:'viscosity',          min:0,   max:100,  step:1,   fmt:x=>(x/100).toFixed(2) },
+  { key:'rad',   label:'radius',             min:6,   max:40,   step:1,   fmt:x=>x },
+  { key:'drag',  label:'drag',               min:0,   max:80,   step:1,   fmt:x=>(x/10).toFixed(1)+'%' },
+  { key:'spin',  label:'vortex spin',        min:-100,max:100,  step:1,   fmt:x=>(x/100).toFixed(2) },
+  { key:'wells', label:'wells',              min:0,   max:8,    step:1,   fmt:x=>x },
+  { key:'mass',  label:'well mass',          min:0,   max:300,  step:5,   fmt:x=>(x/100).toFixed(2) },
+  { key:'ptr',   label:'pointer force',      min:0,   max:300,  step:5,   fmt:x=>(x/100).toFixed(2) },
+  { key:'tilt',  label:'tilt force',         min:0,   max:300,  step:5,   fmt:x=>(x/100).toFixed(2) },
+  { key:'trail', label:'trail persistence',  min:0,   max:99,   step:1,   fmt:x=>(x/100).toFixed(2) },
+  { key:'size',  label:'particle size',      min:20,  max:400,  step:5,   fmt:x=>(x/100).toFixed(2) },
+  { key:'glow',  label:'glow',               min:0,   max:100,  step:1,   fmt:x=>(x/100).toFixed(2) },
+];
+const COLOR_NAMES  = ['VELOCITY','DENSITY','SPECTRUM','HEAT'];
+const BOUND_NAMES  = ['BOUNCE','WRAP','VOID'];
+const QUAL_NAMES   = ['AUTO','HIGH','BALANCED','SPEED'];
+
+const el = id => document.getElementById(id);
+const statusEl = el('status');
+
+// build sliders
+const slidersHost = el('sliders');
+const rowEls = {};
+for (const s of SLIDERS){
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<span>${s.label}</span><span id="v_${s.key}">—</span>`;
+  const input = document.createElement('input');
+  input.type = 'range'; input.id = 'r_' + s.key;
+  input.min = s.min; input.max = s.max; input.step = s.step;
+  slidersHost.appendChild(row);
+  slidersHost.appendChild(input);
+  rowEls[s.key] = { input, valEl: el('v_' + s.key), dragging: false };
+  input.addEventListener('pointerdown', () => rowEls[s.key].dragging = true);
+  input.addEventListener('pointerup',   () => rowEls[s.key].dragging = false);
+  input.addEventListener('input', () => {
+    rowEls[s.key].valEl.textContent = s.fmt(+input.value);
+    send({ type: 'set', key: s.key, value: +input.value });
+  });
+}
+
+let ws = null;
+function send(msg){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+function action(name){ send({ type: 'action', name }); }
+
+el('b_color').addEventListener('click',   () => action('color'));
+el('b_bounds').addEventListener('click',  () => action('bounds'));
+el('b_links').addEventListener('click',   () => action('links'));
+el('b_wellviz').addEventListener('click', () => action('wellviz'));
+el('b_quality').addEventListener('click', () => action('quality'));
+el('b_imu').addEventListener('click',     () => action('imu'));
+el('b_burst').addEventListener('click',   () => action('burst'));
+el('b_reset').addEventListener('click',   () => action('reset'));
+el('b_pause').addEventListener('click',   () => action('pause'));
+
+function applyState(state){
+  for (const s of SLIDERS){
+    if (!(s.key in state)) continue;
+    const r = rowEls[s.key];
+    if (r.dragging) continue; // don't fight an in-progress local drag
+    if (document.activeElement !== r.input) r.input.value = state[s.key];
+    r.valEl.textContent = s.fmt(+r.input.value);
+  }
+  el('b_color').textContent   = 'COLOR: ' + (COLOR_NAMES[state.color] ?? '?');
+  el('b_bounds').textContent  = 'EDGE: ' + (BOUND_NAMES[state.bounds] ?? '?');
+  el('b_links').textContent   = 'LINKS: ' + (state.links ? 'ON' : 'OFF');
+  el('b_links').classList.toggle('on', !!state.links);
+  el('b_wellviz').textContent = 'WELLS: ' + (state.wellviz ? 'SHOWN' : 'HIDDEN');
+  el('b_wellviz').classList.toggle('on', !!state.wellviz);
+  el('b_quality').textContent = 'QUALITY: ' + (QUAL_NAMES[state.quality] ?? '?');
+  el('b_quality').classList.toggle('on', state.quality !== 0);
+  el('b_imu').textContent     = 'MOTION: ' + (state.imu ? 'ON' : 'OFF');
+  el('b_imu').classList.toggle('on', !!state.imu);
+  el('b_pause').textContent   = state.paused ? 'RESUME' : 'PAUSE';
+  el('b_pause').classList.toggle('on', !!state.paused);
+}
+
+function connect(){
+  statusEl.textContent = 'connecting…'; statusEl.className = '';
+  try { ws = new WebSocket(`wss://${location.host}`); }
+  catch (err) { setTimeout(connect, 3000); return; }
+  ws.addEventListener('open', () => { statusEl.textContent = 'connected'; statusEl.className = 'live'; });
+  ws.addEventListener('message', ev => {
+    let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.type === 'state') applyState(msg.state);
+  });
+  ws.addEventListener('close', () => {
+    statusEl.textContent = 'disconnected — retrying…'; statusEl.className = 'dead';
+    setTimeout(connect, 3000);
+  });
+  ws.addEventListener('error', () => ws.close());
+}
+connect();
+</script>
+</body>
+</html>
