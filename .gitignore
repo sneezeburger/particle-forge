@@ -9,3 +9,9 @@ _*
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# generated TLS material (self-signed, regenerate per deployment — see README.md)
+cert.pem
+key.pem
+cert.der
+*.mobileconfig
