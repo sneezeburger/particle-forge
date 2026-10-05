@@ -1154,6 +1154,7 @@ el('b_share').addEventListener('click', () => {
 });
 
 /* ─────────── presets ─────────── */
+let currentPreset = null;
 const PRESETS = {
   nebula: { seed:'rand', color:2, bounds:1, links:false, s:{
     count:3200, grav:0, press:330, coh:80, visc:14, rad:18, drag:5, spin:44,
@@ -1192,6 +1193,7 @@ function applyPreset(name){
   document.querySelectorAll('[data-preset]').forEach(b =>
     b.classList.toggle('on', b.dataset.preset === name));
   el('s_mode').textContent = 'preset: ' + name;
+  currentPreset = name;
 }
 document.querySelectorAll('[data-preset]').forEach(b =>
   b.addEventListener('click', () => applyPreset(b.dataset.preset)));
@@ -1235,7 +1237,8 @@ const REMOTE_ACTIONS = {
 };
 function getStateSnapshot(){
   const state = { color: P.colorMode, bounds: P.bounds, links: P.links,
-    wellviz: P.wellViz, quality: qualMode, paused: P.paused, imu: imuEnabled };
+    wellviz: P.wellViz, quality: qualMode, paused: P.paused, imu: imuEnabled,
+    preset: currentPreset };
   for (const key of Object.keys(SLIDER_KEYS)) state[key] = +S[key].value;
   return state;
 }
@@ -1264,6 +1267,9 @@ function connectRemote(){
     } else if (msg.type === 'action' && REMOTE_ACTIONS[msg.name]){
       REMOTE_ACTIONS[msg.name]();
       wsStatus(`connected · ${remoteMsgCount} msgs · action ${msg.name}`);
+    } else if (msg.type === 'preset' && PRESETS[msg.name]){
+      applyPreset(msg.name);
+      wsStatus(`connected · ${remoteMsgCount} msgs · preset ${msg.name}`);
     }
   });
   ws.addEventListener('close', () => {

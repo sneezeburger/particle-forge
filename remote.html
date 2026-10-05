@@ -34,6 +34,9 @@
 <h1>PARTICLE FORGE — REMOTE</h1>
 <div id="status">connecting…</div>
 
+<div class="sec">presets</div>
+<div class="grid" id="presets"></div>
+
 <div class="sec">forces</div>
 <div id="sliders"></div>
 
@@ -71,9 +74,22 @@ const SLIDERS = [
 const COLOR_NAMES  = ['VELOCITY','DENSITY','SPECTRUM','HEAT'];
 const BOUND_NAMES  = ['BOUNCE','WRAP','VOID'];
 const QUAL_NAMES   = ['AUTO','HIGH','BALANCED','SPEED'];
+const PRESETS = ['nebula','fluid','galaxy','storm','web','zerog','sun'];
 
 const el = id => document.getElementById(id);
 const statusEl = el('status');
+
+// build preset buttons
+const presetsHost = el('presets');
+const presetBtns = {};
+for (const name of PRESETS){
+  const btn = document.createElement('button');
+  btn.id = 'p_' + name;
+  btn.textContent = name.toUpperCase();
+  btn.addEventListener('click', () => send({ type: 'preset', name }));
+  presetsHost.appendChild(btn);
+  presetBtns[name] = btn;
+}
 
 // build sliders
 const slidersHost = el('sliders');
@@ -111,6 +127,7 @@ el('b_reset').addEventListener('click',   () => action('reset'));
 el('b_pause').addEventListener('click',   () => action('pause'));
 
 function applyState(state){
+  for (const name of PRESETS) presetBtns[name].classList.toggle('on', state.preset === name);
   for (const s of SLIDERS){
     if (!(s.key in state)) continue;
     const r = rowEls[s.key];
