@@ -105,9 +105,9 @@ const RENDER_TOGGLES = [
   { id:'b_imu',     action:'imu',     desc:'Toggle device motion (tilt / shake) control.' },
 ];
 const ACTION_TOGGLES = [
-  { id:'b_burst', action:'burst', desc:'Trigger an outward shockwave burst from the center.' },
-  { id:'b_reset', action:'reset', desc:'Reset the simulation to its initial state.' },
-  { id:'b_pause', action:'pause', desc:'Pause or resume the simulation.' },
+  { id:'b_burst', action:'burst', label:'BURST', desc:'Trigger an outward shockwave burst from the center.' },
+  { id:'b_reset', action:'reset', label:'RESET', desc:'Reset the simulation to its initial state.' },
+  { id:'b_pause', action:'pause', desc:'Pause or resume the simulation.' }, // label set dynamically by applyState()
 ];
 
 const el = id => document.getElementById(id);
@@ -169,6 +169,7 @@ const actionHost = el('action-toggles');
 for (const t of ACTION_TOGGLES){
   const btn = document.createElement('button');
   btn.id = t.id; btn.title = t.desc;
+  if (t.label) btn.textContent = t.label;
   btn.addEventListener('click', () => action(t.action));
   actionHost.appendChild(btn);
 }
