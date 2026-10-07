@@ -41,8 +41,11 @@
 <div id="sliders-simulation"></div>
 <div class="grid" id="sim-toggles"></div>
 
-<div class="sec">force field</div>
+<div class="sec">force wells</div>
 <div id="sliders-force"></div>
+
+<div class="sec">pointer / touch</div>
+<div id="sliders-pointer"></div>
 
 <div class="sec">imu</div>
 <div id="sliders-imu"></div>
@@ -77,8 +80,10 @@ const SLIDERS = [
     desc:"Strength of each force well's pull." },
   { key:'spin',  label:'vortex spin',        cat:'force',      min:-500,max:500,  step:1,   fmt:x=>(x/100).toFixed(2),
     desc:'Rotational force applied around the force-well centers (no effect without wells).' },
-  { key:'ptr',   label:'pointer force',      cat:'force',      min:0,   max:1000, step:5,   fmt:x=>(x/100).toFixed(2),
+  { key:'ptr',   label:'pointer force',      cat:'pointer',    min:0,   max:1000, step:5,   fmt:x=>(x/100).toFixed(2),
     desc:'How strongly your pointer or touch attracts/repels nearby particles.' },
+  { key:'pswirl',label:'pointer swirl',      cat:'pointer',    min:-200,max:200,  step:5,   fmt:x=>(x/100).toFixed(2),
+    desc:'Rotational swirl applied to particles pulled toward your pointer/touch (attract mode only).' },
   { key:'tilt',  label:'tilt force',         cat:'imu',        min:0,   max:300,  step:5,   fmt:x=>(x/100).toFixed(2),
     desc:'How strongly device tilt steers particles, once the TILT toggle below is on.' },
   { key:'trail', label:'trail persistence',  cat:'render',     min:0,   max:99,   step:1,   fmt:x=>(x/100).toFixed(2),
@@ -142,6 +147,7 @@ for (const name of PRESETS){
 const sliderHosts = {
   simulation: el('sliders-simulation'),
   force: el('sliders-force'),
+  pointer: el('sliders-pointer'),
   imu: el('sliders-imu'),
   render: el('sliders-render'),
 };

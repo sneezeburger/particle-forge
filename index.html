@@ -181,15 +181,19 @@
     <button id="b_bounds" class="wide" title="Cycle what happens at the simulation edges (bounce / wrap / void).">EDGE: BOUNCE</button>
   </div>
 
-  <div class="sec">FORCE FIELD</div>
+  <div class="sec">FORCE WELLS</div>
   <div class="row"><span title="Number of attracting/repelling gravity wells active in the scene.">wells</span><span id="v_wells">3</span></div>
   <input type="range" id="r_wells" min="0" max="8" step="1" value="3" title="Number of attracting/repelling gravity wells active in the scene.">
   <div class="row"><span title="Strength of each force well's pull.">well mass</span><span id="v_mass">1.00</span></div>
   <input type="range" id="r_mass" min="0" max="300" step="5" value="100" title="Strength of each force well's pull.">
   <div class="row"><span title="Rotational force applied around the force-well centers (no effect without wells).">vortex spin</span><span id="v_spin">0.30</span></div>
   <input type="range" id="r_spin" min="-500" max="500" step="1" value="30" title="Rotational force applied around the force-well centers (no effect without wells).">
+
+  <div class="sec">POINTER / TOUCH</div>
   <div class="row"><span title="How strongly your pointer or touch attracts/repels nearby particles.">pointer force</span><span id="v_ptr">1.00</span></div>
   <input type="range" id="r_ptr" min="0" max="1000" step="5" value="100" title="How strongly your pointer or touch attracts/repels nearby particles.">
+  <div class="row"><span title="Rotational swirl applied to particles pulled toward your pointer/touch (attract mode only).">pointer swirl</span><span id="v_pswirl">0.55</span></div>
+  <input type="range" id="r_pswirl" min="-200" max="200" step="5" value="55" title="Rotational swirl applied to particles pulled toward your pointer/touch (attract mode only).">
 
   <div class="sec">IMU</div>
   <div class="row"><span title="How strongly device tilt steers particles, once the TILT toggle below is on.">tilt force</span><span id="v_tilt">1.00</span></div>
@@ -265,7 +269,7 @@ const OFF_X = [1, -1, 0, 1], OFF_Y = [0, 1, 1, 1];
 const P = {
   gravity: 0, pressure: 340, cohesion: 120, viscosity: 0.14,
   radius: 17, drag: 0.006, spin: 0.30,
-  wells: 3, wellMass: 1, pointer: 1,
+  wells: 3, wellMass: 1, pointer: 1, pointerSwirl: 0.55,
   trail: 0.86, size: 1, glow: 0.85,
   bounds: 0,            // 0 bounce · 1 wrap · 2 void
   colorMode: 0,         // 0 velocity · 1 density · 2 spectrum · 3 heat
@@ -573,7 +577,7 @@ function physics(dt){
   const nw = P.wells | 0, wm = P.wellMass;
   const grav = P.gravity, spin = P.spin;
   const dragK = Math.pow(1 - P.drag, dt * 60);
-  const pf = P.pointer;
+  const pf = P.pointer, pswirl = P.pointerSwirl;
   const bounds = P.bounds;
   const tiltAx = tilt.x * P.tilt * 550, tiltAy = tilt.y * P.tilt * 550;
 
@@ -605,9 +609,9 @@ function physics(dt){
       const sgn = ptr.mode === 0 ? 1 : -1;
       const g = sgn * 110000 * pf / d2;
       ax += dx * inv * g; ay += dy * inv * g;
-      if (ptr.mode === 0){
+      if (ptr.mode === 0 && pswirl !== 0){
         // swirl around the cursor so pulled matter orbits instead of collapsing
-        const s = Math.abs(g) * 0.55;
+        const s = Math.abs(g) * pswirl;
         ax += -dy * inv * s; ay += dx * inv * s;
       }
       if (d2 < 26000) heat[i] = Math.min(1, heat[i] + dt * 2.4);
@@ -947,6 +951,7 @@ S.spin  = slider('r_spin','v_spin',  x => P.spin = x/100,       x => (x/100).toF
 S.wells = slider('r_wells','v_wells',x => P.wells = x,          x => x);
 S.mass  = slider('r_mass','v_mass',  x => P.wellMass = x/100,   x => (x/100).toFixed(2));
 S.ptr   = slider('r_ptr','v_ptr',    x => P.pointer = x/100,    x => (x/100).toFixed(2));
+S.pswirl= slider('r_pswirl','v_pswirl', x => P.pointerSwirl = x/100, x => (x/100).toFixed(2));
 S.tilt  = slider('r_tilt','v_tilt',  x => P.tilt = x/100,       x => (x/100).toFixed(2));
 S.trail = slider('r_trail','v_trail',x => P.trail = x/100,      x => (x/100).toFixed(2));
 S.size  = slider('r_size','v_size',  x => P.size = x/100,       x => (x/100).toFixed(2));
@@ -1005,8 +1010,8 @@ function setQualityMode(mode){
 
 const SLIDER_KEYS = {
   count: 'n', grav: 'g', press: 'p', coh: 'ch', visc: 'vi', rad: 'r',
-  drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf', tilt: 'tf',
-  trail: 'tr', size: 'sz', glow: 'gl'
+  drag: 'd', spin: 'sp', wells: 'w', mass: 'm', ptr: 'pf', pswirl: 'ps',
+  tilt: 'tf', trail: 'tr', size: 'sz', glow: 'gl'
 };
 
 function serializeState(){
@@ -1096,25 +1101,25 @@ let currentPreset = null;
 const PRESETS = {
   nebula: { seed:'rand', color:2, bounds:1, links:false, s:{
     count:1000, grav:0, press:330, coh:80, visc:14, rad:18, drag:5, spin:44,
-    wells:4, mass:115, ptr:110, trail:90, size:95, glow:88 } },
+    wells:4, mass:115, ptr:110, pswirl:55, trail:90, size:95, glow:88 } },
   fluid:  { seed:'block', color:1, bounds:0, links:false, s:{
     count:900, grav:34, press:620, coh:210, visc:15, rad:30, drag:0, spin:0,
-    wells:0, mass:0, ptr:70, trail:40, size:130, glow:80 } },
+    wells:0, mass:0, ptr:70, pswirl:55, trail:40, size:130, glow:80 } },
   galaxy: { seed:'disc', color:3, bounds:2, links:false, s:{
     count:1000, grav:0, press:70, coh:20, visc:2, rad:11, drag:0, spin:8,
-    wells:2, mass:170, ptr:120, trail:94, size:70, glow:75 } },
+    wells:2, mass:170, ptr:120, pswirl:55, trail:94, size:70, glow:75 } },
   storm:  { seed:'rand', color:0, bounds:0, links:false, s:{
     count:1000, grav:0, press:480, coh:60, visc:8, rad:19, drag:2, spin:88,
-    wells:6, mass:150, ptr:160, trail:90, size:95, glow:95 } },
+    wells:6, mass:150, ptr:160, pswirl:55, trail:90, size:95, glow:95 } },
   web:    { seed:'rand', color:1, bounds:0, links:true, s:{
     count:1000, grav:0, press:260, coh:150, visc:22, rad:34, drag:12, spin:0,
-    wells:2, mass:60, ptr:80, trail:58, size:115, glow:72 } },
+    wells:2, mass:60, ptr:80, pswirl:55, trail:58, size:115, glow:72 } },
   zerog:  { seed:'rand', color:2, bounds:1, links:false, s:{
     count:1000, grav:0, press:560, coh:0, visc:0, rad:14, drag:0, spin:0,
-    wells:0, mass:0, ptr:120, trail:70, size:85, glow:70 } },
+    wells:0, mass:0, ptr:120, pswirl:55, trail:70, size:85, glow:70 } },
   sun:    { seed:'disc', color:1, bounds:2, links:false, s:{
     count:800, grav:0, press:900, coh:0, visc:8, rad:40, drag:0, spin:88,
-    wells:0, mass:150, ptr:160, trail:90, size:95, glow:95 } }
+    wells:0, mass:150, ptr:160, pswirl:55, trail:90, size:95, glow:95 } }
 };
 
 function applyPreset(name){
