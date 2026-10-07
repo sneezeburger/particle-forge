@@ -66,7 +66,7 @@ const SLIDERS = [
     desc:'Attraction pulling nearby particles together, like surface tension.' },
   { key:'visc',  label:'viscosity',          cat:'simulation', min:0,   max:100,  step:1,   fmt:x=>(x/100).toFixed(2),
     desc:'Damps relative velocity between neighbors, making flow thicker.' },
-  { key:'rad',   label:'radius',             cat:'simulation', min:6,   max:40,   step:1,   fmt:x=>x,
+  { key:'rad',   label:'radius',             cat:'simulation', min:6,   max:100,  step:1,   fmt:x=>x,
     desc:'Interaction radius — how far neighboring particles can affect each other.' },
   { key:'drag',  label:'drag',               cat:'simulation', min:0,   max:80,   step:1,   fmt:x=>(x/10).toFixed(1)+'%',
     desc:'Air resistance that drains particle velocity over time.' },
