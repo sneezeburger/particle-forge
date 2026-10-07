@@ -57,7 +57,7 @@
   /* IMU and panel-open buttons are fully removed (not just text-hidden) so
      the whole screen is dedicated to the visualization; the panel itself
      stays reachable via the H keyboard shortcut. */
-  #imuBtn, #toggle{display:none !important}
+  #toggle{display:none !important}
   h1{margin:0;font-size:20px;letter-spacing:.34em;font-weight:700;
      background:linear-gradient(90deg,#6ef3ff,#a77bff 40%,#ff5edb 70%,#ffd166);
      -webkit-background-clip:text;background-clip:text;color:transparent;
@@ -108,22 +108,11 @@
   #toggle{position:fixed;top:calc(16px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));z-index:7;width:38px;height:38px;padding:0;border-radius:11px;
     font-size:15px;display:none;place-items:center;background:var(--glass);backdrop-filter:blur(12px)}
   #toggle.show{display:grid}
-  #imuBtn{position:fixed;top:calc(16px + env(safe-area-inset-top));right:calc(62px + env(safe-area-inset-right));z-index:7;border-radius:11px;font-size:10px;
-    background:var(--glass);backdrop-filter:blur(12px);display:none}
-  #imuBtn.show{display:block}
   #closePanel{position:absolute;top:10px;right:10px;z-index:1;width:26px;height:26px;padding:0;
     display:grid;place-items:center;font-size:12px;line-height:1;border-radius:8px}
   #hint{position:fixed;bottom:calc(14px + env(safe-area-inset-bottom));left:calc(16px + env(safe-area-inset-left));z-index:5;font-size:10.5px;color:var(--dim);
     letter-spacing:.06em;line-height:1.75;pointer-events:none;user-select:none}
   #share_feedback{min-height:1.2em;color:var(--accent);font-size:10px;text-align:center}
-  /* long-press (and other transient action) feedback toast */
-  #toast{position:fixed;top:calc(16px + env(safe-area-inset-top));left:50%;z-index:20;
-    transform:translate(-50%,-14px);padding:9px 18px;border-radius:12px;
-    background:var(--glass);border:1px solid var(--stroke);
-    backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
-    font-size:12px;letter-spacing:.08em;color:#fff;pointer-events:none;user-select:none;
-    opacity:0;transition:opacity .2s ease,transform .2s ease;white-space:nowrap}
-  #toast.show{opacity:1;transform:translate(-50%,0)}
   body.speed-mode #aurora,body.speed-mode #vignette{display:none}
   kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-bottom-width:2px;
     border-radius:5px;padding:1px 5px;font-size:9.5px;color:#dbe4ff}
@@ -147,7 +136,6 @@
 <canvas id="c"></canvas>
 <div id="aurora"></div>
 <div id="vignette"></div>
-<div id="toast"></div>
 
 <div id="hud">
   <h1>PARTICLE&nbsp;FORGE</h1>
@@ -161,7 +149,6 @@
   </div>
 </div>
 
-<button id="imuBtn" title="Toggle tilt / shake controls">📱 MOTION: OFF</button>
 <button id="toggle" class="show" title="Show controls (H)">☰</button>
 
 <div id="panel" class="hidden">
@@ -202,8 +189,14 @@
   <input type="range" id="r_spin" min="-100" max="100" step="1" value="30" title="Rotational force applied around the force-well centers (no effect without wells).">
   <div class="row"><span title="How strongly your pointer or touch attracts/repels nearby particles.">pointer force</span><span id="v_ptr">1.00</span></div>
   <input type="range" id="r_ptr" min="0" max="300" step="5" value="100" title="How strongly your pointer or touch attracts/repels nearby particles.">
-  <div class="row"><span title="How strongly device tilt (motion sensors) steers particles.">tilt force</span><span id="v_tilt">1.00</span></div>
-  <input type="range" id="r_tilt" min="0" max="300" step="5" value="100" title="How strongly device tilt (motion sensors) steers particles.">
+
+  <div class="sec">IMU</div>
+  <div class="row"><span title="How strongly device tilt steers particles, once the TILT toggle below is on.">tilt force</span><span id="v_tilt">1.00</span></div>
+  <input type="range" id="r_tilt" min="0" max="300" step="5" value="100" title="How strongly device tilt steers particles, once the TILT toggle below is on.">
+  <div class="grid">
+    <button id="b_imutilt" title="Use device tilt (beta/gamma) as a directional force on particles, scaled by the tilt force slider above. Also enables shake-to-burst. Requires motion sensor permission.">TILT: OFF</button>
+    <button id="b_imuhue" title="Shift the global particle hue based on compass heading (alpha) — still works when the device is mounted in a fixed stand. Requires motion sensor permission.">HUE: OFF</button>
+  </div>
 
   <div class="sec">RENDER</div>
   <div class="row"><span title="How long particle motion trails linger before fading out.">trail persistence</span><span id="v_trail">0.86</span></div>
@@ -291,15 +284,20 @@ let hueShift = 0;
 let shakeMag = 0;
 const SHAKE_THRESHOLD = 18;    // accel delta (m/s^2) above gravity baseline that counts as a shake
 let lastShakeAt = 0;
-let imuEnabled = false;
+// The two IMU effects are independently toggleable (each may be driven
+// remotely via remote.html — there's no on-device gesture for either
+// anymore, see b_imutilt/b_imuhue wiring below).
+let imuTiltOn = false;   // beta/gamma → directional force (+ shake-to-burst)
+let imuHueOn = false;    // compass heading (alpha) → global hue shift
+let lastBeta = 0, lastGamma = 0;
 let imuPermissionPromise = null;
 // iOS requires DeviceOrientationEvent.requestPermission() to be invoked
-// synchronously inside the original user gesture (touchstart/pointerdown);
-// calling it later from a setTimeout (as the long-press does) silently
-// fails because gesture/activation context is already lost by then. So we
-// kick this off immediately on every press — it's idempotent (one real
-// permission prompt per session) and guarantees the long-press path has
-// permission already in flight by the time its timer fires.
+// synchronously inside a real user gesture; since both IMU toggles are
+// only ever flipped via a button click (local or relayed from remote.html
+// over the websocket), this is called from the toggle functions below. If
+// permission was already granted in an earlier session (the common case
+// for a long-running kiosk device), the promise resolves immediately
+// without needing a gesture at all, so it works fine triggered remotely.
 function ensureImuPermission(){
   if (!imuPermissionPromise) imuPermissionPromise = requestImuPermission();
   return imuPermissionPromise;
@@ -314,34 +312,41 @@ function screenAngle(){
   return 0;
 }
 function handleOrientation(e){
-  if (!imuEnabled) return;
+  if (!imuTiltOn && !imuHueOn) return;
   if (e.beta === null && e.gamma === null) return;
-  tilt.active = true;
   const beta = e.beta || 0;    // front-back, -180..180 (device frame)
   const gamma = e.gamma || 0;  // left-right, -90..90 (device frame)
-  const angle = ((screenAngle() % 360) + 360) % 360;
-  let x, y;
-  switch (angle){
-    case 90:  x = beta;  y = -gamma; break;
-    case 180: x = -gamma; y = -beta; break;
-    case 270: x = -beta; y = gamma;  break;
-    default:  x = gamma; y = beta;   // angle 0 (portrait)
+  lastBeta = beta; lastGamma = gamma;
+  if (imuTiltOn){
+    tilt.active = true;
+    const angle = ((screenAngle() % 360) + 360) % 360;
+    let x, y;
+    switch (angle){
+      case 90:  x = beta;  y = -gamma; break;
+      case 180: x = -gamma; y = -beta; break;
+      case 270: x = -beta; y = gamma;  break;
+      default:  x = gamma; y = beta;   // angle 0 (portrait)
+    }
+    tilt.x = clampN(x / 45, -2, 2);
+    tilt.y = clampN(y / 45, -2, 2);
   }
-  tilt.x = clampN(x / 45, -2, 2);
-  tilt.y = clampN(y / 45, -2, 2);
-  // compass heading → global hue shift. iOS Safari exposes the non-standard
-  // webkitCompassHeading (true-north heading, no calibration quirks); fall
-  // back to the standard `alpha` field elsewhere, which is often relative
-  // to an arbitrary start orientation rather than true north but still
-  // sweeps a full 0-360 range as the device is rotated, which is all a
-  // colour-cycling effect needs.
-  const heading = typeof e.webkitCompassHeading === 'number' ? e.webkitCompassHeading : e.alpha;
-  if (heading !== null && heading !== undefined) hueShift = heading;
-  updateImuHud(beta, gamma);
+  if (imuHueOn){
+    // compass heading → global hue shift. iOS Safari exposes the non-standard
+    // webkitCompassHeading (true-north heading, no calibration quirks); fall
+    // back to the standard `alpha` field elsewhere, which is often relative
+    // to an arbitrary start orientation rather than true north but still
+    // sweeps a full 0-360 range as the device is rotated, which is all a
+    // colour-cycling effect needs.
+    const heading = typeof e.webkitCompassHeading === 'number' ? e.webkitCompassHeading : e.alpha;
+    if (heading !== null && heading !== undefined) hueShift = heading;
+  }
+  updateImuHud();
 }
 
 function handleMotion(e){
-  if (!imuEnabled) return;
+  // shake-to-burst groups under the tilt toggle since both derive from
+  // physical device movement, as opposed to the hue toggle's compass data.
+  if (!imuTiltOn) return;
   const a = e.accelerationIncludingGravity || e.acceleration;
   if (!a) return;
   const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
@@ -873,38 +878,18 @@ function pos(e){
 // anything longer or that drags becomes the normal push/pull pointer force
 // instead, so taps and drags don't fight each other.
 const TAP_MAX_MS = 280, TAP_MAX_DRIFT = 14;
-const LONG_PRESS_MS = 600;
-let tap = { x: 0, y: 0, t: 0, moved: false, longPressed: false };
-let longPressTimer = null;
+let tap = { x: 0, y: 0, t: 0, moved: false };
 
-function cancelLongPress(){
-  if (longPressTimer !== null){ clearTimeout(longPressTimer); longPressTimer = null; }
-}
 function tapStart(x, y){
   ptr.px = ptr.x; ptr.py = ptr.y; ptr.x = x; ptr.y = y; ptr.down = true;
-  tap.x = x; tap.y = y; tap.t = performance.now(); tap.moved = false; tap.longPressed = false;
-  cancelLongPress();
-  // kick off the (idempotent) iOS permission request now, synchronously
-  // inside this real user gesture, so it's already resolved/in-flight by
-  // the time the long-press timer below fires.
-  ensureImuPermission();
-  longPressTimer = setTimeout(() => {
-    longPressTimer = null;
-    if (!ptr.down || tap.moved) return;
-    tap.longPressed = true;
-    toggleImu();
-  }, LONG_PRESS_MS);
+  tap.x = x; tap.y = y; tap.t = performance.now(); tap.moved = false;
 }
 function tapMove(x, y){
   ptr.px = ptr.x; ptr.py = ptr.y; ptr.x = x; ptr.y = y;
-  if (ptr.down && Math.hypot(x - tap.x, y - tap.y) > TAP_MAX_DRIFT){
-    tap.moved = true;
-    cancelLongPress();
-  }
+  if (ptr.down && Math.hypot(x - tap.x, y - tap.y) > TAP_MAX_DRIFT) tap.moved = true;
 }
 function tapEnd(x, y){
-  cancelLongPress();
-  const willBurst = ptr.down && !tap.moved && !tap.longPressed && performance.now() - tap.t <= TAP_MAX_MS;
+  const willBurst = ptr.down && !tap.moved && performance.now() - tap.t <= TAP_MAX_MS;
   if (willBurst) burst(x, y);
   ptr.down = false;
 }
@@ -932,7 +917,6 @@ cvs.addEventListener('pointerup', e => {
 });
 cvs.addEventListener('pointercancel', e => {
   if (e.pointerType === 'touch') return;
-  cancelLongPress();
   ptr.down = false;
 });
 cvs.addEventListener('contextmenu', e => e.preventDefault());
@@ -955,16 +939,7 @@ cvs.addEventListener('touchend', e => {
   const t = e.changedTouches[0];
   tapEnd(t.clientX, t.clientY);
 }, { passive: false });
-cvs.addEventListener('touchcancel', () => { cancelLongPress(); ptr.down = false; });
-
-const toastEl = el('toast');
-let toastTimer = null;
-function showToast(msg, ms = 1500){
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
-}
+cvs.addEventListener('touchcancel', () => { ptr.down = false; });
 
 function burst(x, y, power){
   waves.push({
@@ -974,30 +949,32 @@ function burst(x, y, power){
   });
 }
 
-function updateImuHud(beta, gamma){
-  el('s_imu').textContent = `imu: β${beta.toFixed(0)}° γ${gamma.toFixed(0)}° hue${hueShift.toFixed(0)}°`;
+function updateImuHud(){
+  const parts = [];
+  if (imuTiltOn) parts.push(`tilt β${lastBeta.toFixed(0)}° γ${lastGamma.toFixed(0)}°`);
+  if (imuHueOn) parts.push(`hue ${hueShift.toFixed(0)}°`);
+  el('s_imu').textContent = parts.length ? 'imu: ' + parts.join(' · ') : 'imu: off';
 }
 
-async function toggleImu(){
+// Both IMU effects are toggled only via explicit buttons (panel or
+// remote.html) — there's no on-device gesture for this anymore, since the
+// device is mounted in a fixed stand and driven remotely.
+async function toggleImuTilt(){
   await ensureImuPermission();
-  imuEnabled = !imuEnabled;
-  imuBtn.textContent = imuEnabled ? '📱 MOTION: ON' : '📱 MOTION: OFF';
-  imuBtn.classList.toggle('on', imuEnabled);
-  if (!imuEnabled){
-    tilt.x = 0; tilt.y = 0; tilt.active = false; shakeMag = 0; hueShift = 0;
-    el('s_imu').textContent = 'imu: off';
-  } else {
-    el('s_imu').textContent = 'imu: waiting for data…';
-  }
-  showToast(imuEnabled ? '📱 MOTION: ON' : '📱 MOTION: OFF');
+  imuTiltOn = !imuTiltOn;
+  if (!imuTiltOn){ tilt.x = 0; tilt.y = 0; tilt.active = false; shakeMag = 0; }
+  el('b_imutilt').textContent = 'TILT: ' + (imuTiltOn ? 'ON' : 'OFF');
+  el('b_imutilt').classList.toggle('on', imuTiltOn);
+  updateImuHud();
 }
-
-const imuBtn = el('imuBtn');
-if (typeof window.DeviceOrientationEvent !== 'undefined' ||
-    typeof window.DeviceMotionEvent !== 'undefined'){
-  imuBtn.classList.add('show');
+async function toggleImuHue(){
+  await ensureImuPermission();
+  imuHueOn = !imuHueOn;
+  if (!imuHueOn) hueShift = 0;
+  el('b_imuhue').textContent = 'HUE: ' + (imuHueOn ? 'ON' : 'OFF');
+  el('b_imuhue').classList.toggle('on', imuHueOn);
+  updateImuHud();
 }
-imuBtn.addEventListener('click', toggleImu);
 
 /* ─────────── UI wiring ─────────── */
 function slider(id, valId, fn, fmt){
@@ -1065,6 +1042,8 @@ el('b_quality').addEventListener('click', cycleQuality);
 el('b_burst').addEventListener('click', () => burst(W/2, H/2));
 el('b_reset').addEventListener('click', resetSim);
 el('b_pause').addEventListener('click', togglePause);
+el('b_imutilt').addEventListener('click', toggleImuTilt);
+el('b_imuhue').addEventListener('click', toggleImuHue);
 
 function setQualityMode(mode){
   qualMode = mode;
@@ -1246,11 +1225,12 @@ const REMOTE_ACTIONS = {
   color: cycleColor, bounds: cycleBounds, links: toggleLinks,
   wellviz: toggleWellViz, quality: cycleQuality,
   burst: () => burst(W / 2, H / 2), reset: resetSim, pause: togglePause,
-  imu: toggleImu
+  imutilt: toggleImuTilt, imuhue: toggleImuHue
 };
 function getStateSnapshot(){
   const state = { color: P.colorMode, bounds: P.bounds, links: P.links,
-    wellviz: P.wellViz, quality: qualMode, paused: P.paused, imu: imuEnabled,
+    wellviz: P.wellViz, quality: qualMode, paused: P.paused,
+    imuTilt: imuTiltOn, imuHue: imuHueOn,
     preset: currentPreset };
   for (const key of Object.keys(SLIDER_KEYS)) state[key] = +S[key].value;
   return state;
