@@ -60,6 +60,8 @@
 
 <script>
 const SLIDERS = [
+  { key:'simspeed', label:'sim speed',       cat:'simulation', min:0,   max:500,  step:5,   fmt:x=>(x/100).toFixed(2),
+    desc:'Overall simulation speed multiplier. 0 fully pauses the simulation; 1 is normal speed.' },
   { key:'count', label:'particles',         cat:'simulation', min:300, max:1000, step:100, fmt:x=>x,
     desc:'Number of particles simulated. Higher values add detail but cost FPS.' },
   { key:'grav',  label:'gravity',            cat:'simulation', min:-40, max:80,   step:1,   fmt:x=>(x/10).toFixed(2),
@@ -124,7 +126,6 @@ const IMU_TOGGLES = [
 const ACTION_TOGGLES = [
   { id:'b_burst', action:'burst', label:'BURST', desc:'Trigger an outward shockwave burst from the center.' },
   { id:'b_reset', action:'reset', label:'RESET', desc:'Reset the simulation to its initial state.' },
-  { id:'b_pause', action:'pause', desc:'Pause or resume the simulation.' }, // label set dynamically by applyState()
 ];
 
 const el = id => document.getElementById(id);
@@ -229,8 +230,6 @@ function applyState(state){
   el('b_imutilt').classList.toggle('on', !!state.imuTilt);
   el('b_imuhue').textContent  = 'HUE: ' + (state.imuHue ? 'ON' : 'OFF');
   el('b_imuhue').classList.toggle('on', !!state.imuHue);
-  el('b_pause').textContent   = state.paused ? 'RESUME' : 'PAUSE';
-  el('b_pause').classList.toggle('on', !!state.paused);
 }
 
 function connect(){
