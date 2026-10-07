@@ -190,8 +190,8 @@
   <input type="range" id="r_spin" min="-500" max="500" step="1" value="30" title="Rotational force applied around the force-well centers (no effect without wells).">
 
   <div class="sec">POINTER / TOUCH</div>
-  <div class="row"><span title="How strongly your pointer or touch attracts/repels nearby particles.">pointer force</span><span id="v_ptr">1.00</span></div>
-  <input type="range" id="r_ptr" min="0" max="1000" step="5" value="100" title="How strongly your pointer or touch attracts/repels nearby particles.">
+  <div class="row"><span title="How strongly your pointer or touch pulls nearby particles in (positive) or pushes them away (negative).">pointer force</span><span id="v_ptr">1.00</span></div>
+  <input type="range" id="r_ptr" min="-1000" max="1000" step="5" value="100" title="How strongly your pointer or touch pulls nearby particles in (positive) or pushes them away (negative).">
   <div class="row"><span title="Rotational swirl applied to particles pulled toward your pointer/touch (attract mode only).">pointer swirl</span><span id="v_pswirl">0.55</span></div>
   <input type="range" id="r_pswirl" min="-200" max="200" step="5" value="55" title="Rotational swirl applied to particles pulled toward your pointer/touch (attract mode only).">
 
@@ -358,7 +358,7 @@ const COLOR_NAMES  = ['VELOCITY','DENSITY','SPECTRUM','HEAT'];
 const BOUND_NAMES  = ['BOUNCE','WRAP','VOID'];
 
 /* pointer */
-const ptr = { x:0, y:0, px:0, py:0, down:false, mode:0, active:false }; // mode 0 pull · 1 push
+const ptr = { x:0, y:0, px:0, py:0, down:false, active:false };
 
 /* gravity wells */
 let wells = [];
@@ -606,12 +606,11 @@ function physics(dt){
       const dx = ptr.x - x, dy = ptr.y - y;
       const d2 = dx * dx + dy * dy + 400;
       const inv = 1 / Math.sqrt(d2);
-      const sgn = ptr.mode === 0 ? 1 : -1;
-      const g = sgn * 110000 * pf / d2;
+      const g = 110000 * pf / d2;
       ax += dx * inv * g; ay += dy * inv * g;
-      if (ptr.mode === 0 && pswirl !== 0){
+      if (pf > 0 && pswirl !== 0){
         // swirl around the cursor so pulled matter orbits instead of collapsing
-        const s = Math.abs(g) * pswirl;
+        const s = g * pswirl;
         ax += -dy * inv * s; ay += dx * inv * s;
       }
       if (d2 < 26000) heat[i] = Math.min(1, heat[i] + dt * 2.4);
@@ -865,12 +864,10 @@ cvs.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') return;
   cvs.setPointerCapture(e.pointerId);
   tapStart(e.clientX, e.clientY);
-  ptr.mode = (e.button === 2 || e.shiftKey) ? 1 : 0;
 });
 cvs.addEventListener('pointermove', e => {
   if (e.pointerType === 'touch') return;
   tapMove(e.clientX, e.clientY);
-  if (e.shiftKey && ptr.down) ptr.mode = 1;
 });
 cvs.addEventListener('pointerup', e => {
   if (e.pointerType === 'touch') return;
@@ -887,7 +884,6 @@ cvs.addEventListener('dblclick', e => { pos(e); burst(ptr.x, ptr.y); });
 cvs.addEventListener('touchstart', e => {
   e.preventDefault();
   const t = e.changedTouches[0];
-  ptr.mode = 0;
   tapStart(t.clientX, t.clientY);
 }, { passive: false });
 cvs.addEventListener('touchmove', e => {
