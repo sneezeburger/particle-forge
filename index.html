@@ -179,6 +179,9 @@
   <input type="range" id="r_rad" min="6" max="100" step="1" value="17" title="Interaction radius — how far neighboring particles can affect each other.">
   <div class="row"><span title="Air resistance that drains particle velocity over time.">drag</span><span id="v_drag">0.6%</span></div>
   <input type="range" id="r_drag" min="0" max="80" step="1" value="6" title="Air resistance that drains particle velocity over time.">
+  <div class="grid">
+    <button id="b_bounds" class="wide" title="Cycle what happens at the simulation edges (bounce / wrap / void).">EDGE: BOUNCE</button>
+  </div>
 
   <div class="sec">FORCE FIELD</div>
   <div class="row"><span title="Number of attracting/repelling gravity wells active in the scene.">wells</span><span id="v_wells">3</span></div>
@@ -207,7 +210,6 @@
   <input type="range" id="r_glow" min="0" max="100" step="1" value="85" title="Intensity of additive glow/bloom around particles.">
   <div class="grid">
     <button id="b_color" title="Cycle particle coloring mode (velocity / density / spectrum / heat).">COLOR: VELOCITY</button>
-    <button id="b_bounds" title="Cycle what happens at the simulation edges (bounce / wrap / void).">EDGE: BOUNCE</button>
     <button id="b_links" title="Toggle lines drawn between nearby particles.">LINKS: OFF</button>
     <button id="b_wellviz" class="on" title="Toggle visibility of force well markers.">WELLS: SHOWN</button>
     <button id="b_quality" class="wide" title="Cycle render quality / performance mode.">QUALITY: SPEED (30 FPS)</button>

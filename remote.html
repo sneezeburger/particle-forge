@@ -39,6 +39,7 @@
 
 <div class="sec">simulation</div>
 <div id="sliders-simulation"></div>
+<div class="grid" id="sim-toggles"></div>
 
 <div class="sec">force field</div>
 <div id="sliders-force"></div>
@@ -100,9 +101,11 @@ const PRESET_DESC = {
   zerog:  'Free-floating particles with no gravity or cohesion.',
   sun:    'Dense, fast-spinning hot core pushing particles outward.',
 };
+const SIM_TOGGLES = [
+  { id:'b_bounds',  action:'bounds',  desc:'Cycle what happens at the simulation edges (bounce / wrap / void).' },
+];
 const RENDER_TOGGLES = [
   { id:'b_color',   action:'color',   desc:'Cycle particle coloring mode (velocity / density / spectrum / heat).' },
-  { id:'b_bounds',  action:'bounds',  desc:'Cycle what happens at the simulation edges (bounce / wrap / void).' },
   { id:'b_links',   action:'links',   desc:'Toggle lines drawn between nearby particles.' },
   { id:'b_wellviz', action:'wellviz', desc:'Toggle visibility of force well markers.' },
   { id:'b_quality', action:'quality', desc:'Cycle render quality / performance mode.' },
@@ -167,7 +170,14 @@ let ws = null;
 function send(msg){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
 function action(name){ send({ type: 'action', name }); }
 
-// build render + imu + action toggle buttons
+// build sim + render + imu + action toggle buttons
+const simHost = el('sim-toggles');
+for (const t of SIM_TOGGLES){
+  const btn = document.createElement('button');
+  btn.id = t.id; btn.title = t.desc;
+  btn.addEventListener('click', () => action(t.action));
+  simHost.appendChild(btn);
+}
 const renderHost = el('render-toggles');
 for (const t of RENDER_TOGGLES){
   const btn = document.createElement('button');
