@@ -90,7 +90,7 @@ const SLIDERS = [
 ];
 const COLOR_NAMES  = ['VELOCITY','DENSITY','SPECTRUM','HEAT'];
 const BOUND_NAMES  = ['BOUNCE','WRAP','VOID'];
-const QUAL_NAMES   = ['AUTO','HIGH','BALANCED','SPEED'];
+const QUAL_NAMES   = ['HIGH','BALANCED','SPEED'];
 const PRESETS = ['nebula','fluid','galaxy','storm','web','zerog','sun'];
 const PRESET_DESC = {
   nebula: 'Drifting colorful cloud with gentle cohesion and soft force wells.',
@@ -218,7 +218,7 @@ function applyState(state){
   el('b_wellviz').textContent = 'WELLS: ' + (state.wellviz ? 'SHOWN' : 'HIDDEN');
   el('b_wellviz').classList.toggle('on', !!state.wellviz);
   el('b_quality').textContent = 'QUALITY: ' + (QUAL_NAMES[state.quality] ?? '?');
-  el('b_quality').classList.toggle('on', state.quality !== 0);
+  el('b_quality').classList.toggle('on', state.quality !== 1);
   el('b_imutilt').textContent = 'TILT: ' + (state.imuTilt ? 'ON' : 'OFF');
   el('b_imutilt').classList.toggle('on', !!state.imuTilt);
   el('b_imuhue').textContent  = 'HUE: ' + (state.imuHue ? 'ON' : 'OFF');
