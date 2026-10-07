@@ -163,8 +163,8 @@
   </div>
 
   <div class="sec">SIMULATION</div>
-  <div class="row"><span title="Number of particles simulated. Higher values add detail but cost FPS.">particles</span><span id="v_count">2600</span></div>
-  <input type="range" id="r_count" min="300" max="9000" step="100" value="2600" title="Number of particles simulated. Higher values add detail but cost FPS.">
+  <div class="row"><span title="Number of particles simulated. Higher values add detail but cost FPS.">particles</span><span id="v_count">1000</span></div>
+  <input type="range" id="r_count" min="300" max="1000" step="100" value="1000" title="Number of particles simulated. Higher values add detail but cost FPS.">
   <div class="row"><span title="Constant downward (or upward) pull applied to every particle.">gravity</span><span id="v_grav">0.00</span></div>
   <input type="range" id="r_grav" min="-40" max="80" step="1" value="0" title="Constant downward (or upward) pull applied to every particle.">
   <div class="row"><span title="Repulsion strength that keeps nearby particles from overlapping.">pressure</span><span id="v_press">340</span></div>
@@ -255,7 +255,7 @@ const vx = new Float32Array(MAXN), vy = new Float32Array(MAXN);
 const hue = new Float32Array(MAXN), rad = new Float32Array(MAXN);
 const dens = new Float32Array(MAXN), dprev = new Float32Array(MAXN);
 const heat = new Float32Array(MAXN);
-let N = 2600;
+let N = 1000;
 /* hard ceiling on neighbour interactions per particle: keeps a collapsing
    clump from turning the O(pairs) inner loop quadratic and killing the fps */
 const NEIGH_CAP = 32;
@@ -1095,22 +1095,22 @@ el('b_share').addEventListener('click', () => {
 let currentPreset = null;
 const PRESETS = {
   nebula: { seed:'rand', color:2, bounds:1, links:false, s:{
-    count:3200, grav:0, press:330, coh:80, visc:14, rad:18, drag:5, spin:44,
+    count:1000, grav:0, press:330, coh:80, visc:14, rad:18, drag:5, spin:44,
     wells:4, mass:115, ptr:110, trail:90, size:95, glow:88 } },
   fluid:  { seed:'block', color:1, bounds:0, links:false, s:{
     count:900, grav:34, press:620, coh:210, visc:15, rad:15, drag:0, spin:0,
     wells:0, mass:0, ptr:70, trail:40, size:130, glow:80 } },
   galaxy: { seed:'disc', color:3, bounds:2, links:false, s:{
-    count:5000, grav:0, press:70, coh:20, visc:2, rad:11, drag:0, spin:8,
+    count:1000, grav:0, press:70, coh:20, visc:2, rad:11, drag:0, spin:8,
     wells:2, mass:170, ptr:120, trail:94, size:70, glow:75 } },
   storm:  { seed:'rand', color:0, bounds:0, links:false, s:{
-    count:3600, grav:0, press:480, coh:60, visc:8, rad:19, drag:2, spin:88,
+    count:1000, grav:0, press:480, coh:60, visc:8, rad:19, drag:2, spin:88,
     wells:6, mass:150, ptr:160, trail:90, size:95, glow:95 } },
   web:    { seed:'rand', color:1, bounds:0, links:true, s:{
     count:1000, grav:0, press:260, coh:150, visc:22, rad:34, drag:12, spin:0,
     wells:2, mass:60, ptr:80, trail:58, size:115, glow:72 } },
   zerog:  { seed:'rand', color:2, bounds:1, links:false, s:{
-    count:4200, grav:0, press:560, coh:0, visc:0, rad:14, drag:0, spin:0,
+    count:1000, grav:0, press:560, coh:0, visc:0, rad:14, drag:0, spin:0,
     wells:0, mass:0, ptr:120, trail:70, size:85, glow:70 } },
   sun:    { seed:'rand', color:1, bounds:2, links:false, s:{
     count:800, grav:0, press:900, coh:0, visc:8, rad:40, drag:0, spin:88,
