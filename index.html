@@ -284,6 +284,10 @@ const P = {
 // tilt.x/.y: unit-ish directional force derived from device beta/gamma,
 // applied as an extra field in physics() alongside gravity/wells/pointer.
 const tilt = { x: 0, y: 0, active: false };
+// global hue offset (deg) driven by compass heading — lets a stand-mounted
+// phone (where tilt is mostly unusable) still affect the scene just by
+// rotating which way it faces.
+let hueShift = 0;
 let shakeMag = 0;
 const SHAKE_THRESHOLD = 18;    // accel delta (m/s^2) above gravity baseline that counts as a shake
 let lastShakeAt = 0;
@@ -325,6 +329,14 @@ function handleOrientation(e){
   }
   tilt.x = clampN(x / 45, -2, 2);
   tilt.y = clampN(y / 45, -2, 2);
+  // compass heading → global hue shift. iOS Safari exposes the non-standard
+  // webkitCompassHeading (true-north heading, no calibration quirks); fall
+  // back to the standard `alpha` field elsewhere, which is often relative
+  // to an arbitrary start orientation rather than true north but still
+  // sweeps a full 0-360 range as the device is rotated, which is all a
+  // colour-cycling effect needs.
+  const heading = typeof e.webkitCompassHeading === 'number' ? e.webkitCompassHeading : e.alpha;
+  if (heading !== null && heading !== undefined) hueShift = heading;
   updateImuHud(beta, gamma);
 }
 
@@ -771,6 +783,7 @@ function render(){
     else if (mode === 2) h = (hue[i] + tt * 26) % 360;                // rolling spectrum
     else                 h = 32 - Math.min(1, heat[i]) * 40 + Math.min(1, s / 900) * 26;
     if (h < 0) h += 360;
+    if (hueShift) h = (h + hueShift) % 360;
 
     const idx = ((h * (HUES / 360)) | 0) & (HUES - 1);
     const energy = Math.min(1, s / 460);
@@ -962,7 +975,7 @@ function burst(x, y, power){
 }
 
 function updateImuHud(beta, gamma){
-  el('s_imu').textContent = `imu: β${beta.toFixed(0)}° γ${gamma.toFixed(0)}°`;
+  el('s_imu').textContent = `imu: β${beta.toFixed(0)}° γ${gamma.toFixed(0)}° hue${hueShift.toFixed(0)}°`;
 }
 
 async function toggleImu(){
@@ -971,7 +984,7 @@ async function toggleImu(){
   imuBtn.textContent = imuEnabled ? '📱 MOTION: ON' : '📱 MOTION: OFF';
   imuBtn.classList.toggle('on', imuEnabled);
   if (!imuEnabled){
-    tilt.x = 0; tilt.y = 0; tilt.active = false; shakeMag = 0;
+    tilt.x = 0; tilt.y = 0; tilt.active = false; shakeMag = 0; hueShift = 0;
     el('s_imu').textContent = 'imu: off';
   } else {
     el('s_imu').textContent = 'imu: waiting for data…';
