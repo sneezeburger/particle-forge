@@ -142,8 +142,6 @@
   <div id="sub">SPH FLUID · N-BODY WELLS · VORTEX FIELD</div>
   <div id="stats">
     <div><b id="s_fps">60</b> fps &nbsp;·&nbsp; <b id="s_n">0</b> particles &nbsp;·&nbsp; <b id="s_pairs">0</b>k pairs &nbsp;·&nbsp; <b id="s_res">1.00</b>x res</div>
-    <div id="s_mode">preset: nebula</div>
-    <div id="s_imu">imu: idle</div>
     <div id="s_ws">remote: idle</div>
     <div id="fpsbar"><div id="fpsfill"></div></div>
   </div>
@@ -288,7 +286,6 @@ let hueShift = 0;
 // anymore, see b_imutilt/b_imuhue wiring below).
 let imuTiltOn = false;   // beta/gamma → directional force
 let imuHueOn = false;    // compass heading (alpha) → global hue shift
-let lastBeta = 0, lastGamma = 0;
 let imuPermissionPromise = null;
 // iOS requires DeviceOrientationEvent.requestPermission() to be invoked
 // synchronously inside a real user gesture; since both IMU toggles are
@@ -315,7 +312,6 @@ function handleOrientation(e){
   if (e.beta === null && e.gamma === null) return;
   const beta = e.beta || 0;    // front-back, -180..180 (device frame)
   const gamma = e.gamma || 0;  // left-right, -90..90 (device frame)
-  lastBeta = beta; lastGamma = gamma;
   if (imuTiltOn){
     tilt.active = true;
     const angle = ((screenAngle() % 360) + 360) % 360;
@@ -339,7 +335,6 @@ function handleOrientation(e){
     const heading = typeof e.webkitCompassHeading === 'number' ? e.webkitCompassHeading : e.alpha;
     if (heading !== null && heading !== undefined) hueShift = heading;
   }
-  updateImuHud();
 }
 
 function clampN(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
@@ -922,13 +917,6 @@ function burst(x, y, power){
   });
 }
 
-function updateImuHud(){
-  const parts = [];
-  if (imuTiltOn) parts.push(`tilt β${lastBeta.toFixed(0)}° γ${lastGamma.toFixed(0)}°`);
-  if (imuHueOn) parts.push(`hue ${hueShift.toFixed(0)}°`);
-  el('s_imu').textContent = parts.length ? 'imu: ' + parts.join(' · ') : 'imu: off';
-}
-
 // Both IMU effects are toggled only via explicit buttons (panel or
 // remote.html) — there's no on-device gesture for this anymore, since the
 // device is mounted in a fixed stand and driven remotely.
@@ -938,7 +926,6 @@ async function toggleImuTilt(){
   if (!imuTiltOn){ tilt.x = 0; tilt.y = 0; tilt.active = false; }
   el('b_imutilt').textContent = 'TILT: ' + (imuTiltOn ? 'ON' : 'OFF');
   el('b_imutilt').classList.toggle('on', imuTiltOn);
-  updateImuHud();
 }
 async function toggleImuHue(){
   await ensureImuPermission();
@@ -946,7 +933,6 @@ async function toggleImuHue(){
   if (!imuHueOn) hueShift = 0;
   el('b_imuhue').textContent = 'HUE: ' + (imuHueOn ? 'ON' : 'OFF');
   el('b_imuhue').classList.toggle('on', imuHueOn);
-  updateImuHud();
 }
 
 /* ─────────── UI wiring ─────────── */
@@ -1097,7 +1083,6 @@ function loadFromURL(){
   if (Number.isInteger(quality) && quality >= 0 && quality < QUAL_NAMES.length){
     setQualityMode(quality);
   }
-  el('s_mode').textContent = 'shared configuration';
   return true;
 }
 
@@ -1157,7 +1142,6 @@ function applyPreset(name){
   waves.length = 0;
   document.querySelectorAll('[data-preset]').forEach(b =>
     b.classList.toggle('on', b.dataset.preset === name));
-  el('s_mode').textContent = 'preset: ' + name;
   currentPreset = name;
 }
 document.querySelectorAll('[data-preset]').forEach(b =>
