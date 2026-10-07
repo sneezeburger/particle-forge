@@ -194,7 +194,7 @@
   <div class="row"><span title="How strongly device tilt steers particles, once the TILT toggle below is on.">tilt force</span><span id="v_tilt">1.00</span></div>
   <input type="range" id="r_tilt" min="0" max="300" step="5" value="100" title="How strongly device tilt steers particles, once the TILT toggle below is on.">
   <div class="grid">
-    <button id="b_imutilt" title="Use device tilt (beta/gamma) as a directional force on particles, scaled by the tilt force slider above. Also enables shake-to-burst. Requires motion sensor permission.">TILT: OFF</button>
+    <button id="b_imutilt" title="Use device tilt (beta/gamma) as a directional force on particles, scaled by the tilt force slider above. Requires motion sensor permission.">TILT: OFF</button>
     <button id="b_imuhue" title="Shift the global particle hue based on compass heading (alpha) — still works when the device is mounted in a fixed stand. Requires motion sensor permission.">HUE: OFF</button>
   </div>
 
@@ -225,7 +225,7 @@
 
 <div id="hint">
   <kbd>drag</kbd> attract &nbsp; <kbd>shift+drag</kbd> / <kbd>right-drag</kbd> repel &nbsp; <kbd>space</kbd> shockwave<br>
-  <kbd>tilt</kbd> steer field &nbsp; <kbd>shake</kbd> shockwave &nbsp; (tap 📱 to enable)<br>
+  <kbd>tilt</kbd> &amp; <kbd>compass</kbd> controlled remotely &nbsp; (see IMU panel)<br>
   <kbd>1</kbd>–<kbd>7</kbd> presets &nbsp; <kbd>C</kbd> color &nbsp; <kbd>L</kbd> links &nbsp; <kbd>P</kbd> pause &nbsp; <kbd>R</kbd> reset &nbsp; <kbd>H</kbd> hide UI
 </div>
 
@@ -281,13 +281,10 @@ const tilt = { x: 0, y: 0, active: false };
 // phone (where tilt is mostly unusable) still affect the scene just by
 // rotating which way it faces.
 let hueShift = 0;
-let shakeMag = 0;
-const SHAKE_THRESHOLD = 18;    // accel delta (m/s^2) above gravity baseline that counts as a shake
-let lastShakeAt = 0;
 // The two IMU effects are independently toggleable (each may be driven
 // remotely via remote.html — there's no on-device gesture for either
 // anymore, see b_imutilt/b_imuhue wiring below).
-let imuTiltOn = false;   // beta/gamma → directional force (+ shake-to-burst)
+let imuTiltOn = false;   // beta/gamma → directional force
 let imuHueOn = false;    // compass heading (alpha) → global hue shift
 let lastBeta = 0, lastGamma = 0;
 let imuPermissionPromise = null;
@@ -343,22 +340,6 @@ function handleOrientation(e){
   updateImuHud();
 }
 
-function handleMotion(e){
-  // shake-to-burst groups under the tilt toggle since both derive from
-  // physical device movement, as opposed to the hue toggle's compass data.
-  if (!imuTiltOn) return;
-  const a = e.accelerationIncludingGravity || e.acceleration;
-  if (!a) return;
-  const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
-  const delta = Math.abs(mag - 9.8);
-  shakeMag = shakeMag * 0.8 + delta * 0.2;
-  const now = performance.now();
-  if (shakeMag > SHAKE_THRESHOLD && now - lastShakeAt > 500){
-    lastShakeAt = now;
-    burst(W/2 + (Math.random()-0.5)*W*0.3, H/2 + (Math.random()-0.5)*H*0.3, 8200);
-  }
-}
-
 function clampN(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
 
 async function requestImuPermission(){
@@ -369,16 +350,6 @@ async function requestImuPermission(){
       if (res === 'granted') window.addEventListener('deviceorientation', handleOrientation);
     } else {
       window.addEventListener('deviceorientation', handleOrientation);
-    }
-  } catch(err){ /* not supported / denied */ }
-
-  try {
-    if (typeof DeviceMotionEvent !== 'undefined' &&
-        typeof DeviceMotionEvent.requestPermission === 'function'){
-      const res = await DeviceMotionEvent.requestPermission();
-      if (res === 'granted') window.addEventListener('devicemotion', handleMotion);
-    } else {
-      window.addEventListener('devicemotion', handleMotion);
     }
   } catch(err){ /* not supported / denied */ }
 }
@@ -962,7 +933,7 @@ function updateImuHud(){
 async function toggleImuTilt(){
   await ensureImuPermission();
   imuTiltOn = !imuTiltOn;
-  if (!imuTiltOn){ tilt.x = 0; tilt.y = 0; tilt.active = false; shakeMag = 0; }
+  if (!imuTiltOn){ tilt.x = 0; tilt.y = 0; tilt.active = false; }
   el('b_imutilt').textContent = 'TILT: ' + (imuTiltOn ? 'ON' : 'OFF');
   el('b_imutilt').classList.toggle('on', imuTiltOn);
   updateImuHud();
