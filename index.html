@@ -160,6 +160,7 @@
     <button data-preset="web" title="Sparse mesh of linked particles tracing a web-like structure">WEB</button>
     <button data-preset="zerog" title="Free-floating particles with no gravity or cohesion">ZERO-G</button>
     <button data-preset="sun" class="on" title="Dense, fast-spinning hot core pushing particles outward">SUN</button>
+    <button data-preset="lava" title="Thick, glowing magma with slow churn and a pulsing repelling vortex">LAVA</button>
   </div>
 
   <div class="sec">SIMULATION</div>
@@ -1114,7 +1115,10 @@ const PRESETS = {
     wells:0, mass:0, ptr:120, pswirl:55, trail:70, size:85, glow:70 } },
   sun:    { seed:'disc', color:1, bounds:2, links:false, s:{
     count:800, grav:0, press:900, coh:0, visc:8, rad:40, drag:0, spin:88,
-    wells:0, mass:150, ptr:160, pswirl:55, trail:90, size:95, glow:95 } }
+    wells:0, mass:150, ptr:160, pswirl:55, trail:90, size:95, glow:95 } },
+  lava:   { seed:'rand', color:1, bounds:0, links:false, s:{
+    count:1000, grav:0, press:180, coh:95, visc:4, rad:26, drag:2, spin:93,
+    wells:3, mass:165, ptr:165, pswirl:-140, trail:11, size:200, glow:95 } }
 };
 
 function applyPreset(name){
