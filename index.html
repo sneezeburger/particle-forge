@@ -1095,28 +1095,28 @@ el('b_share').addEventListener('click', () => {
 /* ─────────── presets ─────────── */
 let currentPreset = null;
 const PRESETS = {
-  nebula: { seed:'rand', color:2, bounds:1, links:false, s:{
+  nebula: { seed:'rand', color:2, bounds:1, links:false, wellViz:true, s:{
     count:1000, grav:0, press:330, coh:80, visc:14, rad:18, drag:5, spin:44,
     wells:4, mass:115, ptr:110, pswirl:55, trail:90, size:95, glow:88 } },
-  fluid:  { seed:'block', color:1, bounds:0, links:false, s:{
+  fluid:  { seed:'block', color:1, bounds:0, links:false, wellViz:true, s:{
     count:900, grav:34, press:620, coh:210, visc:15, rad:30, drag:0, spin:0,
     wells:0, mass:0, ptr:70, pswirl:55, trail:40, size:130, glow:80 } },
-  galaxy: { seed:'disc', color:3, bounds:2, links:false, s:{
+  galaxy: { seed:'disc', color:3, bounds:2, links:false, wellViz:true, s:{
     count:1000, grav:0, press:70, coh:20, visc:2, rad:11, drag:0, spin:8,
     wells:2, mass:170, ptr:120, pswirl:55, trail:94, size:70, glow:75 } },
-  storm:  { seed:'rand', color:0, bounds:0, links:false, s:{
+  storm:  { seed:'rand', color:0, bounds:0, links:false, wellViz:true, s:{
     count:1000, grav:0, press:480, coh:60, visc:8, rad:19, drag:2, spin:88,
     wells:6, mass:150, ptr:160, pswirl:55, trail:90, size:95, glow:95 } },
-  web:    { seed:'rand', color:1, bounds:0, links:true, s:{
+  web:    { seed:'rand', color:1, bounds:0, links:true, wellViz:true, s:{
     count:1000, grav:0, press:260, coh:150, visc:22, rad:34, drag:12, spin:0,
     wells:2, mass:60, ptr:80, pswirl:55, trail:58, size:115, glow:72 } },
-  zerog:  { seed:'rand', color:2, bounds:1, links:false, s:{
+  zerog:  { seed:'rand', color:2, bounds:1, links:false, wellViz:true, s:{
     count:1000, grav:0, press:560, coh:0, visc:0, rad:14, drag:0, spin:0,
     wells:0, mass:0, ptr:120, pswirl:55, trail:70, size:85, glow:70 } },
-  sun:    { seed:'disc', color:1, bounds:2, links:false, s:{
+  sun:    { seed:'disc', color:1, bounds:2, links:false, wellViz:true, s:{
     count:800, grav:0, press:900, coh:0, visc:8, rad:40, drag:0, spin:88,
     wells:0, mass:150, ptr:160, pswirl:55, trail:90, size:95, glow:95 } },
-  lava:   { seed:'rand', color:1, bounds:0, links:false, s:{
+  lava:   { seed:'rand', color:1, bounds:0, links:false, wellViz:false, s:{
     count:1000, grav:0, press:180, coh:95, visc:4, rad:26, drag:2, spin:93,
     wells:3, mass:165, ptr:165, pswirl:-140, trail:11, size:200, glow:95 } }
 };
@@ -1129,6 +1129,9 @@ function applyPreset(name){
   P.links     = p.links;
   el('b_links').textContent = 'LINKS: ' + (p.links ? 'ON' : 'OFF');
   el('b_links').classList.toggle('on', p.links);
+  P.wellViz = p.wellViz;
+  el('b_wellviz').textContent = 'WELLS: ' + (p.wellViz ? 'SHOWN' : 'HIDDEN');
+  el('b_wellviz').classList.toggle('on', p.wellViz);
   buildWells();
   reseed(p.seed);
   waves.length = 0;
