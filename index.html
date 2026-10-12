@@ -262,6 +262,10 @@ const vx = new Float32Array(MAXN), vy = new Float32Array(MAXN);
 const hue = new Float32Array(MAXN), rad = new Float32Array(MAXN);
 const dens = new Float32Array(MAXN), dprev = new Float32Array(MAXN);
 const heat = new Float32Array(MAXN);
+// Snapshot of each particle's position as of the previous physics tick,
+// used to interpolate rendered position between ticks (see renderAlpha in
+// frame()) so low sim speeds don't look like a slideshow.
+const prevPx = new Float32Array(MAXN), prevPy = new Float32Array(MAXN);
 let N = 1000;
 /* hard ceiling on neighbour interactions per particle: keeps a collapsing
    clump from turning the O(pairs) inner loop quadratic and killing the fps */
@@ -456,6 +460,7 @@ function spawn(i, kind){
   rad[i] = 0.65 + Math.random() * 0.8;
   heat[i] = 0;
   dens[i] = 0;
+  prevPx[i] = px[i]; prevPy[i] = py[i];
 }
 function reseed(kind){ for (let i = 0; i < N; i++) spawn(i, kind); }
 
@@ -773,7 +778,9 @@ function render(){
     const qa = (a * 16 | 0) / 16;
     if (qa !== lastA){ ctx.globalAlpha = qa; lastA = qa; }
     const hs = size * 0.5;
-    ctx.drawImage(atlas[idx], px[i] - hs, py[i] - hs, size, size);
+    const rx = prevPx[i] + (px[i] - prevPx[i]) * renderAlpha;
+    const ry = prevPy[i] + (py[i] - prevPy[i]) * renderAlpha;
+    ctx.drawImage(atlas[idx], rx - hs, ry - hs, size, size);
   }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
@@ -783,6 +790,11 @@ function render(){
 const SIM_DT = 1 / 60;
 const SPEED_FRAME_MS = 1000 / 30;
 let last = performance.now(), nextSpeedFrame = last, simTime = 0;
+// Fraction (0..1) of the way from the previous physics tick to the next
+// one; render() lerps prevPx/prevPy → px/py by this amount so slow sim
+// speeds (infrequent ticks) still animate smoothly every rendered frame
+// instead of visibly jumping only 3-4 times a second.
+let renderAlpha = 1;
 let fps = 60, acc = 0, frames = 0;
 const el = id => document.getElementById(id);
 
@@ -810,11 +822,14 @@ function frame(now){
     // physics substeps per frame.
     const maxSteps = Math.max(1, Math.ceil(speed * 3));
     while (simTime >= SIM_DT && steps < maxSteps){
+      prevPx.set(px.subarray(0, N));
+      prevPy.set(py.subarray(0, N));
       physics(SIM_DT);
       simTime -= SIM_DT;
       steps++;
     }
     if (steps === maxSteps && simTime >= SIM_DT) simTime = 0;
+    renderAlpha = Math.min(1, simTime / SIM_DT);
   }
   render();
 
