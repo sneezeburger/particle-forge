@@ -1186,6 +1186,52 @@ function getStateSnapshot(){
   for (const key of Object.keys(SLIDER_KEYS)) state[key] = +S[key].value;
   return state;
 }
+/* Applies a full state snapshot broadcast by another already-connected
+   index.html instance — used so a freshly loaded device picks up the
+   live parameters instead of always booting to the default preset.
+   IMU toggles are deliberately not synced: enabling them requires an
+   explicit permission-granting user gesture on iOS, so each device must
+   turn those on for itself. */
+function applyStateSnapshot(state){
+  for (const key of Object.keys(SLIDER_KEYS)){
+    if (Object.prototype.hasOwnProperty.call(state, key)) setSlider(key, state[key]);
+  }
+  if (Number.isInteger(state.color) && state.color >= 0 && state.color < COLOR_NAMES.length){
+    P.colorMode = state.color;
+    el('b_color').textContent = 'COLOR: ' + COLOR_NAMES[state.color];
+  }
+  if (Number.isInteger(state.bounds) && state.bounds >= 0 && state.bounds < BOUND_NAMES.length){
+    P.bounds = state.bounds;
+    el('b_bounds').textContent = 'EDGE: ' + BOUND_NAMES[state.bounds];
+  }
+  if (typeof state.links === 'boolean'){
+    P.links = state.links;
+    el('b_links').textContent = 'LINKS: ' + (P.links ? 'ON' : 'OFF');
+    el('b_links').classList.toggle('on', P.links);
+  }
+  if (typeof state.wellviz === 'boolean'){
+    P.wellViz = state.wellviz;
+    el('b_wellviz').textContent = 'WELLS: ' + (P.wellViz ? 'SHOWN' : 'HIDDEN');
+    el('b_wellviz').classList.toggle('on', P.wellViz);
+  }
+  if (Number.isInteger(state.quality) && state.quality >= 0 && state.quality < QUAL_NAMES.length){
+    setQualityMode(state.quality);
+  }
+  currentPreset = (typeof state.preset === 'string' && PRESETS[state.preset]) ? state.preset : null;
+  document.querySelectorAll('[data-preset]').forEach(b =>
+    b.classList.toggle('on', b.dataset.preset === currentPreset));
+  buildWells();
+  reseed(currentPreset ? PRESETS[currentPreset].seed : 'rand');
+  waves.length = 0;
+}
+let firstRemoteStateResolve = null;
+const firstRemoteStatePromise = new Promise(res => { firstRemoteStateResolve = res; });
+function waitForFirstRemoteState(timeoutMs){
+  return Promise.race([
+    firstRemoteStatePromise,
+    new Promise(res => setTimeout(() => res(null), timeoutMs))
+  ]);
+}
 let remoteWS = null, remoteBroadcastTimer = null, remoteMsgCount = 0;
 function wsStatus(text){ const e = el('s_ws'); if (e) e.textContent = 'remote: ' + text; }
 function connectRemote(){
@@ -1214,6 +1260,9 @@ function connectRemote(){
     } else if (msg.type === 'preset' && PRESETS[msg.name]){
       applyPreset(msg.name);
       wsStatus(`connected · ${remoteMsgCount} msgs · preset ${msg.name}`);
+    } else if (msg.type === 'state' && firstRemoteStateResolve){
+      firstRemoteStateResolve(msg.state);
+      firstRemoteStateResolve = null;
     }
   });
   ws.addEventListener('close', () => {
@@ -1244,7 +1293,13 @@ document.addEventListener('visibilitychange', () => {
 { const v = viewportSize(); ptr.x = v.w / 2; ptr.y = v.h / 2; }
 applyPreset('sun');
 setQualityMode(1);
-loadFromURL();
+/* Explicit shared-link URL params always win. Otherwise, give any
+   already-connected device's live broadcast a brief window to arrive so
+   a freshly loaded instance picks up the current parameters instead of
+   always starting from the default preset. */
+if (!loadFromURL()){
+  waitForFirstRemoteState(700).then(state => { if (state) applyStateSnapshot(state); });
+}
 })();
 </script>
 </body>
