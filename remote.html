@@ -62,7 +62,7 @@
 const SLIDERS = [
   { key:'simspeed', label:'sim speed',       cat:'simulation', min:0,   max:500,  step:5,   fmt:x=>(x/100).toFixed(2),
     desc:'Overall simulation speed multiplier. 0 fully pauses the simulation; 1 is normal speed.' },
-  { key:'count', label:'particles',         cat:'simulation', min:300, max:1000, step:100, fmt:x=>x,
+  { key:'count', label:'particles',         cat:'simulation', min:300, max:2000, step:100, fmt:x=>x,
     desc:'Number of particles simulated. Higher values add detail but cost FPS.' },
   { key:'grav',  label:'gravity',            cat:'simulation', min:-40, max:80,   step:1,   fmt:x=>(x/10).toFixed(2),
     desc:'Constant downward (or upward) pull applied to every particle.' },
