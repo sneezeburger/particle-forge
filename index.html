@@ -219,6 +219,7 @@
     <button id="b_links" title="Toggle lines drawn between nearby particles.">LINKS: OFF</button>
     <button id="b_wellviz" class="on" title="Toggle visibility of force well markers.">WELLS: SHOWN</button>
     <button id="b_quality" class="wide" title="Cycle render quality / performance mode.">QUALITY: SPEED (30 FPS)</button>
+    <button id="b_osd" class="on wide" title="Toggle the on-screen stats display (fps / particles / pairs / resolution).">OSD: SHOWN</button>
   </div>
 
   <div class="sec">ACTIONS</div>
@@ -995,6 +996,13 @@ function toggleWellViz(){
   el('b_wellviz').textContent = 'WELLS: ' + (P.wellViz ? 'SHOWN' : 'HIDDEN');
   el('b_wellviz').classList.toggle('on', P.wellViz);
 }
+let osdVisible = true;
+function toggleOSD(){
+  osdVisible = !osdVisible;
+  el('stats').style.display = osdVisible ? '' : 'none';
+  el('b_osd').textContent = 'OSD: ' + (osdVisible ? 'SHOWN' : 'HIDDEN');
+  el('b_osd').classList.toggle('on', osdVisible);
+}
 function cycleQuality(){
   setQualityMode((qualMode + 1) % 3);
 }
@@ -1005,6 +1013,7 @@ el('b_bounds').addEventListener('click', cycleBounds);
 el('b_links').addEventListener('click', toggleLinks);
 el('b_wellviz').addEventListener('click', toggleWellViz);
 el('b_quality').addEventListener('click', cycleQuality);
+el('b_osd').addEventListener('click', toggleOSD);
 el('b_burst').addEventListener('click', () => burst(W/2, H/2));
 el('b_reset').addEventListener('click', resetSim);
 el('b_imutilt').addEventListener('click', toggleImuTilt);
@@ -1193,13 +1202,13 @@ window.addEventListener('keydown', e => {
    own UI (e.g. on first connect) without guessing current values. */
 const REMOTE_ACTIONS = {
   color: cycleColor, bounds: cycleBounds, links: toggleLinks,
-  wellviz: toggleWellViz, quality: cycleQuality,
+  wellviz: toggleWellViz, quality: cycleQuality, osd: toggleOSD,
   burst: () => burst(W / 2, H / 2), reset: resetSim,
   imutilt: toggleImuTilt, imuhue: toggleImuHue
 };
 function getStateSnapshot(){
   const state = { color: P.colorMode, bounds: P.bounds, links: P.links,
-    wellviz: P.wellViz, quality: qualMode,
+    wellviz: P.wellViz, quality: qualMode, osd: osdVisible,
     imuTilt: imuTiltOn, imuHue: imuHueOn,
     preset: currentPreset };
   for (const key of Object.keys(SLIDER_KEYS)) state[key] = +S[key].value;
@@ -1232,6 +1241,9 @@ function applyStateSnapshot(state){
     P.wellViz = state.wellviz;
     el('b_wellviz').textContent = 'WELLS: ' + (P.wellViz ? 'SHOWN' : 'HIDDEN');
     el('b_wellviz').classList.toggle('on', P.wellViz);
+  }
+  if (typeof state.osd === 'boolean' && state.osd !== osdVisible){
+    toggleOSD();
   }
   if (Number.isInteger(state.quality) && state.quality >= 0 && state.quality < QUAL_NAMES.length){
     setQualityMode(state.quality);
