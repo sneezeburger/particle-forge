@@ -29,6 +29,7 @@ import asyncio
 import mimetypes
 import os
 import ssl
+from datetime import datetime
 
 import websockets
 from websockets.datastructures import Headers
@@ -74,10 +75,18 @@ async def process_request(connection, request):
     return serve_static(request.path)
 
 
+def log(peer, text):
+    print(f"{datetime.now():%H:%M:%S.%f}"[:-3], peer, text, flush=True)
+
+
 async def relay_handler(ws):
+    # Captured up front: ws.remote_address is None once the socket closes.
+    peer = "%s:%s" % ws.remote_address[:2]
     clients.add(ws)
+    log(peer, f"connected ({len(clients)} clients)")
     try:
         async for msg in ws:
+            log(peer, msg)
             stale = set()
             for c in clients:
                 if c is ws:
@@ -89,6 +98,7 @@ async def relay_handler(ws):
             clients.difference_update(stale)
     finally:
         clients.discard(ws)
+        log(peer, f"disconnected ({len(clients)} clients)")
 
 
 async def main():
